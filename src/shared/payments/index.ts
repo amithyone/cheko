@@ -5,6 +5,7 @@ import type {
   VirtualAccount,
 } from "@/types/payment-provider";
 import type { ChargeCardRequest, ChargeCardResponse } from "@/features/pos/terminal/api";
+import { validateCheckoutNowBroadcastCredentials } from "@/shared/broadcast/credentials";
 
 export interface PaymentAdapter {
   id: PaymentProviderId;
@@ -90,12 +91,22 @@ function limitedAdapter(
 }
 
 export function createCheckoutNowAdapter(creds: PaymentProviderCredentials | null): PaymentAdapter {
-  return baseAdapter("checkoutnow", {
+  const base = baseAdapter("checkoutnow", {
     virtualAccount: true,
     cardCharge: true,
     transferVerify: true,
     broadcastPay: true,
   }, creds);
+  return {
+    ...base,
+    async verifyCredentials() {
+      const broadcast = validateCheckoutNowBroadcastCredentials(creds);
+      if (!broadcast.ok) {
+        return { ok: false, message: broadcast.errors.join(" ") };
+      }
+      return { ok: true, message: "Pay at Shop credentials look valid (ed25519 + settlement bank)" };
+    },
+  };
 }
 
 export function createMevonPayAdapter(creds: PaymentProviderCredentials | null): PaymentAdapter {

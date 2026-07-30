@@ -88,7 +88,9 @@ def build_broadcast_config() -> dict[str, str]:
     )
 
     if not signing_key:
-        signing_key = "demo-signing-key-min-16-chars"
+        # CheckoutPay terminals must use dashboard Ed25519 key — never SDK demo HMAC.
+        if not terminal_id.upper().startswith("CP-"):
+            signing_key = "demo-signing-key-min-16-chars"
 
     using_sdk_defaults = (
         sig_src == "default"

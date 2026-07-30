@@ -8,6 +8,12 @@ export interface BroadcastHealth {
   bleLive: boolean;
   activeSession: string | null;
   terminalId: string;
+  signatureAlg?: string;
+  bankName?: string;
+  bankNameHash?: string;
+  maskedAccountSuffix?: string;
+  usingSdkDefaults?: boolean;
+  credentialSource?: string;
 }
 
 export interface BroadcastStartResult {

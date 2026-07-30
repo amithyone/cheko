@@ -7,6 +7,12 @@ export interface BroadcastHealth {
   terminalId: string;
   terminalLabel?: string;
   sessionStatus?: "open" | "paid" | "cancelled" | null;
+  signatureAlg?: string;
+  bankName?: string;
+  bankNameHash?: string;
+  maskedAccountSuffix?: string;
+  usingSdkDefaults?: boolean;
+  credentialSource?: string;
 }
 
 export type SessionStatus = "open" | "paid" | "cancelled";

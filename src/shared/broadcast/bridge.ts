@@ -26,6 +26,12 @@ async function httpHealth(): Promise<BroadcastHealth | null> {
       terminal_label?: string;
       session_status?: SessionStatus | null;
       ble_live?: boolean;
+      signature_alg?: string;
+      bank_name?: string;
+      bank_name_hash?: string;
+      masked_account_suffix?: string;
+      using_sdk_defaults?: boolean;
+      credential_source?: string;
     };
     return {
       ok: data.ok,
@@ -36,6 +42,12 @@ async function httpHealth(): Promise<BroadcastHealth | null> {
       terminalId: data.terminal_id,
       terminalLabel: data.terminal_label,
       sessionStatus: data.session_status ?? null,
+      signatureAlg: data.signature_alg,
+      bankName: data.bank_name,
+      bankNameHash: data.bank_name_hash,
+      maskedAccountSuffix: data.masked_account_suffix,
+      usingSdkDefaults: data.using_sdk_defaults,
+      credentialSource: data.credential_source,
     };
   } catch {
     return null;

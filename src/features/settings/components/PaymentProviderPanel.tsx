@@ -82,6 +82,16 @@ export function PaymentProviderPanel({ onSaved }: PaymentProviderPanelProps) {
           : form.signatureAlg,
       webhookSecret: form.webhookSecret,
     };
+    if (provider === "checkoutnow") {
+      const { validateCheckoutNowBroadcastCredentials } = await import(
+        "@/shared/broadcast/credentials"
+      );
+      const check = validateCheckoutNowBroadcastCredentials(creds);
+      if (!check.ok) {
+        onSaved?.(check.errors[0] ?? "Invalid Pay at Shop credentials");
+        return;
+      }
+    }
     await saveCredentials(creds);
     await refresh();
     onSaved?.(`Payment provider set to ${meta.label}`);

@@ -208,11 +208,31 @@ def broadcast():
         return jsonify({"ok": False, "error": "amount_ngn must be positive for checkout mode"}), 400
 
     if cfg.get("using_sdk_defaults") == "true":
-        log.warning(
-            "Broadcast using SDK/dev defaults — set Pay at Shop in Cheko Settings: "
-            "signature_alg=ed25519, bank=RUBIES MFB, suffix=***4863 (%s)",
-            cfg.get("credential_source"),
-        )
+        return jsonify(
+            {
+                "ok": False,
+                "error": (
+                    "Pay at Shop credentials incomplete — open Settings → Payment Provider → "
+                    "CheckoutNow: ed25519 signing key, RUBIES MFB, ***4863 (not SDK kuda/HMAC defaults)"
+                ),
+                "credential_source": cfg.get("credential_source"),
+                "using_sdk_defaults": True,
+            }
+        ), 400
+    if not cfg.get("signing_key"):
+        return jsonify(
+            {
+                "ok": False,
+                "error": "Missing Ed25519 signing key — Settings → CheckoutNow → Signing key from Pay at shop dashboard",
+            }
+        ), 400
+    if cfg.get("signing_key") == "demo-signing-key-min-16-chars":
+        return jsonify(
+            {
+                "ok": False,
+                "error": "Demo signing key cannot be used for CheckoutPay terminals — paste Ed25519 key from dashboard",
+            }
+        ), 400
     if not cfg.get("bank_name") or not cfg.get("masked_suffix"):
         return jsonify(
             {

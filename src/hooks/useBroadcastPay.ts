@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { broadcastBridge } from "@/shared/broadcast/bridge";
+import { validateCheckoutNowBroadcastCredentials } from "@/shared/broadcast/credentials";
+import { usePaymentProvider } from "@/context/PaymentProviderContext";
 import { roundMoney } from "@/shared/utils/money";
 
 import type { BroadcastMode, BroadcastStatus } from "@/shared/broadcast/types";
@@ -29,6 +31,7 @@ const SESSION_REFRESH_MS = 90_000;
 
 export function useBroadcastPay({ enabled, mode, amountNgn, itemCount }: UseBroadcastPayOptions) {
 
+  const { credentials, summary } = usePaymentProvider();
   const [status, setStatus] = useState<BroadcastStatus>("idle");
 
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -53,6 +56,15 @@ export function useBroadcastPay({ enabled, mode, amountNgn, itemCount }: UseBroa
     const { amountNgn: amt, itemCount: items, mode: m } = amountsRef.current;
 
     if (m === "checkout" && (amt <= 0 || items <= 0)) return;
+
+    if (summary.provider === "checkoutnow") {
+      const check = validateCheckoutNowBroadcastCredentials(credentials);
+      if (!check.ok) {
+        setError(check.errors[0] ?? "Configure Pay at Shop in Settings → Payment Provider");
+        setStatus("error");
+        return;
+      }
+    }
 
     setStatus("starting");
 
@@ -93,7 +105,7 @@ export function useBroadcastPay({ enabled, mode, amountNgn, itemCount }: UseBroa
 
     }
 
-  }, []);
+  }, [credentials, summary.provider]);
 
 
 

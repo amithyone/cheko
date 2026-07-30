@@ -295,6 +295,19 @@ function BroadcastTestSection({
             {" · "}
             SDK: {localHealth.sdkInstalled ? "installed" : "simulated"}
           </p>
+          {localHealth.signatureAlg && (
+            <p>
+              Sign: {localHealth.signatureAlg}
+              {localHealth.bankName && ` · Bank: ${localHealth.bankName}`}
+              {localHealth.maskedAccountSuffix && ` · Suffix: ${localHealth.maskedAccountSuffix}`}
+            </p>
+          )}
+          {localHealth.usingSdkDefaults && (
+            <p className="text-rose-600 font-sans font-semibold">
+              SDK defaults detected — configure Settings → Payment Provider → CheckoutNow before
+              broadcasting.
+            </p>
+          )}
         </div>
       )}
       <div className="flex flex-wrap gap-2">

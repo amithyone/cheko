@@ -51,6 +51,12 @@ function pythonCandidates(): string[] {
 function sidecarEnv(): NodeJS.ProcessEnv {
   const creds = getPaymentCredentials();
   const cfg = getTerminalConfig();
+  const terminalId = creds?.terminalId ?? cfg.terminalId ?? "POS-LAG-001";
+  const isCheckoutPayTerminal = terminalId.toUpperCase().startsWith("CP-");
+  const signingKey =
+    creds?.signingKey?.trim() ||
+    process.env.CHEKO_SIGNING_KEY?.trim() ||
+    (isCheckoutPayTerminal ? "" : "demo-signing-key-min-16-chars");
   const sdkPath = app.isPackaged
     ? path.join(process.resourcesPath, "vendor", "checkout_broadcast", "sdk", "python")
     : path.join(app.getAppPath(), "vendor", "checkout_broadcast", "sdk", "python");
@@ -58,11 +64,8 @@ function sidecarEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
     PYTHONPATH: existingPyPath ? `${sdkPath};${existingPyPath}` : sdkPath,
-    CHEKO_TERMINAL_ID: creds?.terminalId ?? cfg.terminalId ?? "POS-LAG-001",
-    CHEKO_SIGNING_KEY:
-      creds?.signingKey ??
-      process.env.CHEKO_SIGNING_KEY ??
-      "demo-signing-key-min-16-chars",
+    CHEKO_TERMINAL_ID: terminalId,
+    CHEKO_SIGNING_KEY: signingKey,
     CHEKO_SIGNATURE_ALG:
       creds?.signatureAlg ??
       process.env.CHEKO_SIGNATURE_ALG ??
@@ -88,6 +91,12 @@ async function fetchExternalHealth(): Promise<BroadcastHealth | null> {
       active_session: string | null;
       terminal_id: string;
       ble_live?: boolean;
+      signature_alg?: string;
+      bank_name?: string;
+      bank_name_hash?: string;
+      masked_account_suffix?: string;
+      using_sdk_defaults?: boolean;
+      credential_source?: string;
     };
     const transport = data.transport ?? "unknown";
     return {
@@ -97,6 +106,12 @@ async function fetchExternalHealth(): Promise<BroadcastHealth | null> {
       bleLive: data.ble_live ?? transport.includes("ble"),
       activeSession: data.active_session,
       terminalId: data.terminal_id,
+      signatureAlg: data.signature_alg,
+      bankName: data.bank_name,
+      bankNameHash: data.bank_name_hash,
+      maskedAccountSuffix: data.masked_account_suffix,
+      usingSdkDefaults: data.using_sdk_defaults,
+      credentialSource: data.credential_source,
     };
   } catch {
     return null;

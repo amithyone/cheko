@@ -79,6 +79,11 @@ export function BroadcastStatusBar({
         </span>
       )}
       {error && <span className="text-[10px] text-red-600">{error}</span>}
+      {error && (
+        <span className="text-[10px] text-red-700 font-medium">
+          Settings → Payment Provider → CheckoutNow: ed25519 key, RUBIES MFB, ***4863
+        </span>
+      )}
     </div>
   );
 }
