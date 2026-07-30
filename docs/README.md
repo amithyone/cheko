@@ -51,7 +51,8 @@ Live URL: https://cheko.check-outnow.com
 | [FLOWS.md](./FLOWS.md) | Payment & cash-point phase machines |
 | [API_STUBS.md](./API_STUBS.md) | Backend endpoints to implement |
 | [BACKEND_HANDOFF.md](./BACKEND_HANDOFF.md) | **Full backend integration guide (start here)** |
-| [FULL_STACK_WINDOWS_POS.md](./FULL_STACK_WINDOWS_POS.md) | **Windows app, hardware, broadcast, restaurant & supermarket roadmap** |
+| [FULL_STACK_WINDOWS_POS.md](./FULL_STACK_WINDOWS_POS.md) | Windows app, hardware, broadcast, restaurant & supermarket roadmap |
+| [WINDOWS_APP_BUILD_PLAN.md](./WINDOWS_APP_BUILD_PLAN.md) | **Step-by-step build plan — start here for Electron Windows app** |
 | [CREDITS.md](../CREDITS.md) | Design attribution — Amithy |
 | [STATE.md](./STATE.md) | Client state ownership |
 | [ROLES.md](./ROLES.md) | Role → navigation matrix |

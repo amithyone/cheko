@@ -19,6 +19,13 @@ import {
 import { CartItem } from "@/types";
 import { useNotice } from "@/context/NoticeContext";
 import {
+  usePaymentProvider,
+  providerSupportsMethod,
+} from "@/context/PaymentProviderContext";
+import { hardwareBridge } from "@/shared/hardware/bridge";
+import { buildReceiptPayload, printReceipt } from "./api";
+import type { VirtualAccount } from "@/types/payment-provider";
+import {
   type PayMethod,
   type PaymentPhase,
   SPLIT_CASH_RATIO,
@@ -46,10 +53,13 @@ export default function TerminalPayModal({
   currencySymbol = "₦",
 }: TerminalPayModalProps) {
   const notice = useNotice();
+  const { adapter, capabilities, summary } = usePaymentProvider();
   const [phase, setPhase] = useState<PaymentPhase>("select_method");
   const [selectedMethod, setSelectedMethod] = useState<PayMethod | null>(null);
   const [printStatus, setPrintStatus] = useState<"none" | "printing" | "printed">("none");
   const [apiPulse, setApiPulse] = useState(false);
+  const [virtualAccount, setVirtualAccount] = useState<VirtualAccount | null>(null);
+  const [processing, setProcessing] = useState(false);
 
   const [cashReceivedInput, setCashReceivedInput] = useState("");
   const [splitCashReceivedInput, setSplitCashReceivedInput] = useState("");
@@ -70,9 +80,26 @@ export default function TerminalPayModal({
   const formatMoney = (n: number) =>
     `${currencySymbol}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const finishSuccess = useCallback(() => {
+  const finishSuccess = useCallback(async () => {
+    if (selectedMethod && printStatus === "none") {
+      setPrintStatus("printing");
+      try {
+        const payload = buildReceiptPayload(
+          cart,
+          totalDue,
+          selectedMethod,
+          currencySymbol,
+          transferRef,
+          summary.terminalId ?? "TERMINAL_04"
+        );
+        await printReceipt(payload);
+        setPrintStatus("printed");
+      } catch {
+        setPrintStatus("printed");
+      }
+    }
     setPhase("success");
-  }, []);
+  }, [selectedMethod, printStatus, cart, totalDue, currencySymbol, transferRef, summary.terminalId]);
 
   const completeAndReturn = useCallback(() => {
     if (selectedMethod) {
@@ -80,28 +107,25 @@ export default function TerminalPayModal({
     }
   }, [onSuccess, selectedMethod, totalDue]);
 
-  const handleSendToPosPrinter = () => {
+  const handleSendToPosPrinter = async () => {
     if (printStatus === "printing") return;
     setPrintStatus("printing");
-
-    const receiptLines = [
-      "cheko POS — TERMINAL_04",
-      `TX-${Date.now().toString().slice(-8)}`,
-      `Method: ${selectedMethod}`,
-      ...cart.map(
-        (item) =>
-          `${item.product.name} x${item.quantity} ${formatMoney(item.product.price * item.quantity)}`
-      ),
-      `TOTAL ${formatMoney(totalDue)}`,
-    ];
-
-    // Simulated ESC/POS dispatch to connected thermal printer on lane 04
-    void receiptLines;
-
-    setTimeout(() => {
+    try {
+      const payload = buildReceiptPayload(
+        cart,
+        totalDue,
+        selectedMethod ?? "Receipt",
+        currencySymbol,
+        transferRef,
+        summary.terminalId ?? "TERMINAL_04"
+      );
+      await printReceipt(payload);
       setPrintStatus("printed");
-      notice.showToast("Receipt sent to POS thermal printer (Terminal 04)", "success");
-    }, 1400);
+      notice.showToast("Receipt sent to POS thermal printer", "success");
+    } catch {
+      setPrintStatus("printed");
+      notice.showToast("Receipt queued (stub)", "info");
+    }
   };
 
   useEffect(() => {
@@ -112,7 +136,8 @@ export default function TerminalPayModal({
     return () => clearTimeout(t);
   }, [phase, completeAndReturn]);
 
-  const openCashDrawer = () => {
+  const openCashDrawer = async () => {
+    await hardwareBridge.openCashDrawer();
     notice.showToast("Cash drawer opened", "info");
   };
 
@@ -120,21 +145,37 @@ export default function TerminalPayModal({
     notice.showToast("Cash drawer closed", "info");
   };
 
-  const startMethod = (method: PayMethod) => {
+  const startMethod = async (method: PayMethod) => {
+    if (!providerSupportsMethod(capabilities, method)) {
+      notice.showWarning(
+        `${summary.provider} does not support this method. Switch to CheckoutNow in Settings for full coverage.`,
+        "Payment method unavailable"
+      );
+      return;
+    }
+
     setSelectedMethod(method);
     setCashReceivedInput("");
     setSplitCashReceivedInput("");
     setSplitStepsDone({ cash: false, t1: false, t2: false });
+    setVirtualAccount(null);
 
     switch (method) {
       case "NFC/Card":
         setPhase("nfc_await_card");
         break;
       case "Cash":
-        openCashDrawer();
+        void openCashDrawer();
         setPhase("cash_amount");
         break;
       case "Bank Transfer":
+        setProcessing(true);
+        try {
+          const va = await adapter.createVirtualAccount(totalDue, transferRef);
+          setVirtualAccount(va);
+        } finally {
+          setProcessing(false);
+        }
         setPhase("transfer_await");
         break;
       case "Split":
@@ -155,9 +196,23 @@ export default function TerminalPayModal({
     setPhase("nfc_await_api");
   };
 
-  const handleNfcApiConfirmed = () => {
-    simulateApiNotification("Card transaction");
-    setTimeout(finishSuccess, 800);
+  const handleNfcApiConfirmed = async () => {
+    setProcessing(true);
+    try {
+      const res = await adapter.chargeCard({
+        terminalId: summary.terminalId ?? "TERMINAL_04",
+        amount: totalDue,
+        reference: nfcAuthRef,
+      });
+      if (res.approved) {
+        simulateApiNotification("Card transaction");
+        setTimeout(() => void finishSuccess(), 800);
+      } else {
+        notice.showWarning("Card declined", "Payment failed");
+      }
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleCashAmountConfirm = () => {
@@ -170,16 +225,24 @@ export default function TerminalPayModal({
       return;
     }
     closeCashDrawer();
-    finishSuccess();
+    void finishSuccess();
   };
 
-  const handleTransferApiConfirmed = () => {
-    simulateApiNotification("Bank transfer");
-    setTimeout(finishSuccess, 800);
+  const handleTransferApiConfirmed = async () => {
+    setProcessing(true);
+    try {
+      const res = await adapter.verifyTransfer(transferRef, totalDue);
+      if (res.credited) {
+        simulateApiNotification("Bank transfer");
+        setTimeout(() => void finishSuccess(), 800);
+      }
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const startSplitFlow = () => {
-    openCashDrawer();
+    void openCashDrawer();
     setPhase("split_cash_amount");
   };
 
@@ -206,8 +269,15 @@ export default function TerminalPayModal({
   const handleSplitTransfer2Confirmed = () => {
     simulateApiNotification("Transfer 2");
     setSplitStepsDone((s) => ({ ...s, t2: true }));
-    setTimeout(finishSuccess, 800);
+    setTimeout(() => void finishSuccess(), 800);
   };
+
+  const methodButtons: { method: PayMethod; enabled: boolean }[] = [
+    { method: "NFC/Card", enabled: providerSupportsMethod(capabilities, "NFC/Card") },
+    { method: "Cash", enabled: providerSupportsMethod(capabilities, "Cash") },
+    { method: "Bank Transfer", enabled: providerSupportsMethod(capabilities, "Bank Transfer") },
+    { method: "Split", enabled: providerSupportsMethod(capabilities, "Split") },
+  ];
 
   const cashChange =
     parseFloat(cashReceivedInput) > totalDue
@@ -291,56 +361,87 @@ export default function TerminalPayModal({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-5xl mx-auto px-2">
-                <button
-                  type="button"
-                  onClick={() => startMethod("NFC/Card")}
-                  className="flex flex-col items-center justify-between p-6 bg-primary hover:bg-primary-hover text-white rounded-3xl shadow-xl hover:-translate-y-0.5 transition-all min-h-[200px] cursor-pointer"
-                >
-                  <CreditCard className="w-12 h-12" strokeWidth={1.5} />
-                  <div className="text-center space-y-2">
-                    <p className="font-bold text-sm">NFC / Card</p>
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/15 rounded-full text-[9px] font-bold uppercase">
-                      Tap to pay
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => startMethod("Cash")}
-                  className="flex flex-col items-center justify-between p-6 bg-white hover:bg-slate-50 text-slate-800 rounded-3xl shadow-md border border-slate-100 min-h-[200px] cursor-pointer"
-                >
-                  <Banknote className="w-12 h-12 text-slate-400" strokeWidth={1.5} />
-                  <div className="text-center">
-                    <p className="font-bold text-sm">Cash</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Opens cash drawer</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => startMethod("Bank Transfer")}
-                  className="flex flex-col items-center justify-between p-6 bg-white hover:bg-slate-50 text-slate-800 rounded-3xl shadow-md border border-slate-100 min-h-[200px] cursor-pointer"
-                >
-                  <Landmark className="w-12 h-12 text-slate-400" strokeWidth={1.5} />
-                  <div className="text-center">
-                    <p className="font-bold text-sm">Bank transfer</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Await API credit</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => startMethod("Split")}
-                  className="flex flex-col items-center justify-between p-6 bg-white hover:bg-slate-50 text-slate-800 rounded-3xl shadow-md border border-slate-100 min-h-[200px] cursor-pointer"
-                >
-                  <Split className="w-12 h-12 text-slate-400" strokeWidth={1.5} />
-                  <div className="text-center">
-                    <p className="font-bold text-sm">Split</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Cash + 2 transfers</p>
-                  </div>
-                </button>
+                {methodButtons.map(({ method, enabled }) => {
+                  const onClick = () => void startMethod(method);
+                  if (method === "NFC/Card") {
+                    return (
+                      <button
+                        key={method}
+                        type="button"
+                        disabled={!enabled}
+                        onClick={onClick}
+                        className={`flex flex-col items-center justify-between p-6 rounded-3xl shadow-xl min-h-[200px] cursor-pointer transition-all ${
+                          enabled
+                            ? "bg-primary hover:bg-primary-hover text-white hover:-translate-y-0.5"
+                            : "bg-slate-100 text-slate-400 cursor-not-allowed opacity-60"
+                        }`}
+                      >
+                        <CreditCard className="w-12 h-12" strokeWidth={1.5} />
+                        <div className="text-center space-y-2">
+                          <p className="font-bold text-sm">NFC / Card</p>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/15 rounded-full text-[9px] font-bold uppercase">
+                            Tap to pay
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  }
+                  if (method === "Cash") {
+                    return (
+                      <button
+                        key={method}
+                        type="button"
+                        disabled={!enabled}
+                        onClick={onClick}
+                        className="flex flex-col items-center justify-between p-6 bg-white hover:bg-slate-50 text-slate-800 rounded-3xl shadow-md border border-slate-100 min-h-[200px] cursor-pointer disabled:opacity-60"
+                      >
+                        <Banknote className="w-12 h-12 text-slate-400" strokeWidth={1.5} />
+                        <div className="text-center">
+                          <p className="font-bold text-sm">Cash</p>
+                          <p className="text-[10px] text-slate-400 mt-1">Opens cash drawer</p>
+                        </div>
+                      </button>
+                    );
+                  }
+                  if (method === "Bank Transfer") {
+                    return (
+                      <button
+                        key={method}
+                        type="button"
+                        disabled={!enabled}
+                        onClick={onClick}
+                        className="flex flex-col items-center justify-between p-6 bg-white hover:bg-slate-50 text-slate-800 rounded-3xl shadow-md border border-slate-100 min-h-[200px] cursor-pointer disabled:opacity-60"
+                      >
+                        <Landmark className="w-12 h-12 text-slate-400" strokeWidth={1.5} />
+                        <div className="text-center">
+                          <p className="font-bold text-sm">Bank transfer</p>
+                          <p className="text-[10px] text-slate-400 mt-1">Virtual account</p>
+                        </div>
+                      </button>
+                    );
+                  }
+                  return (
+                    <button
+                      key={method}
+                      type="button"
+                      disabled={!enabled}
+                      onClick={onClick}
+                      className="flex flex-col items-center justify-between p-6 bg-white hover:bg-slate-50 text-slate-800 rounded-3xl shadow-md border border-slate-100 min-h-[200px] cursor-pointer disabled:opacity-60"
+                    >
+                      <Split className="w-12 h-12 text-slate-400" strokeWidth={1.5} />
+                      <div className="text-center">
+                        <p className="font-bold text-sm">Split</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Cash + 2 transfers</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
+              {!summary.configured && (
+                <p className="text-xs text-amber-600 font-medium">
+                  Configure a payment provider in Settings to enable gateway features.
+                </p>
+              )}
             </motion.div>
           )}
 
@@ -431,18 +532,21 @@ export default function TerminalPayModal({
           {phase === "transfer_await" &&
             renderWaitingPanel(
               "Awaiting bank transfer",
-              `Listening for incoming transfer via API. Reference: ${transferRef}. Total: ${formatMoney(totalDue)}`,
+              virtualAccount
+                ? `Pay ${formatMoney(totalDue)} to ${virtualAccount.bankName} · ${virtualAccount.accountNumber} · ${virtualAccount.accountName}`
+                : `Listening for incoming transfer. Reference: ${transferRef}. Total: ${formatMoney(totalDue)}`,
               <div className="relative">
                 <Landmark className="w-14 h-14 text-indigo-500" />
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full animate-ping" />
               </div>,
               <button
                 type="button"
-                onClick={handleTransferApiConfirmed}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase cursor-pointer flex items-center justify-center gap-2"
+                disabled={processing}
+                onClick={() => void handleTransferApiConfirmed()}
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 <Radio className="w-4 h-4" />
-                Simulate transfer received (API)
+                {processing ? "Verifying…" : "Simulate transfer received (API)"}
               </button>
             )}
 

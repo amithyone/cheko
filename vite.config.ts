@@ -4,7 +4,9 @@ import path from "path";
 import { defineConfig } from "vite";
 
 export default defineConfig(() => {
+  const isElectron = process.env.ELECTRON === "true";
   return {
+    base: isElectron ? "./" : "/",
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Product, DeliveryOrder } from "@/types";
 import { useNotice } from "@/context/NoticeContext";
+import { usePaymentProvider } from "@/context/PaymentProviderContext";
 import { INITIAL_ONLINE_ORDERS, ORDER_BANKS, ORDER_DRIVERS } from "@/mock";
 import { OrderCard } from "../components/OrderCard";
 import { ModalCartItem } from "../components/OrderBuilder";
@@ -36,6 +37,7 @@ export default function OnlineOrdersPage({
   onAutoAddTransaction,
 }: OnlineOrdersPageProps) {
   const notice = useNotice();
+  const { adapter } = usePaymentProvider();
   const [activeTab, setActiveTab] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
@@ -165,7 +167,7 @@ export default function OnlineOrdersPage({
 
   const computedModalCartTotal = modalCart.reduce((acc, curr) => acc + curr.product.price * curr.qty, 0);
 
-  const handleInitiateNewOrder = (e: React.FormEvent) => {
+  const handleInitiateNewOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!custName || !custPhone || !custAddress) {
       notice.showWarning(
@@ -183,7 +185,16 @@ export default function OnlineOrdersPage({
     }
 
     const orderId = `ON-${Math.floor(Math.random() * 9000) + 1000}`;
-    const generatedAcc = generateNubanAccount(orderId);
+    let bankName = selectedBank;
+    let bankAccountNo = generateNubanAccount(orderId);
+
+    try {
+      const va = await adapter.createVirtualAccount(computedModalCartTotal, orderId, custName);
+      bankName = va.bankName;
+      bankAccountNo = va.accountNumber;
+    } catch {
+      /* fallback to mock NUBAN */
+    }
 
     const newOrderPendingPayment: DeliveryOrder = {
       id: orderId,
@@ -201,17 +212,23 @@ export default function OnlineOrdersPage({
       assignedDriver: "None Assigned",
       eta: "Awaiting API Payment Confirmation",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      bankName: selectedBank,
-      bankAccountNo: generatedAcc,
+      bankName,
+      bankAccountNo,
       bankPaid: false,
     };
 
     setSettlementOrder(newOrderPendingPayment);
   };
 
-  const handleConfirmTransferAlertSimulation = () => {
+  const handleConfirmTransferAlertSimulation = async () => {
     if (!settlementOrder) return;
     setIsVerifyingTransfer(true);
+
+    try {
+      await adapter.verifyTransfer(settlementOrder.id, settlementOrder.total);
+    } catch {
+      /* demo continues */
+    }
 
     setTimeout(() => {
       const settledOrder: DeliveryOrder = {

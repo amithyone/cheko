@@ -1,0 +1,150 @@
+import type {
+  PaymentProviderCapabilities,
+  PaymentProviderCredentials,
+  PaymentProviderId,
+  VirtualAccount,
+} from "@/types/payment-provider";
+import type { ChargeCardRequest, ChargeCardResponse } from "@/features/pos/terminal/api";
+
+export interface PaymentAdapter {
+  id: PaymentProviderId;
+  capabilities: PaymentProviderCapabilities;
+  verifyCredentials(): Promise<{ ok: boolean; message?: string }>;
+  createVirtualAccount(amount: number, ref: string, customerName?: string): Promise<VirtualAccount>;
+  chargeCard(req: ChargeCardRequest): Promise<ChargeCardResponse>;
+  verifyTransfer(ref: string, amount: number): Promise<{ credited: boolean; sessionId?: string }>;
+}
+
+export type AdapterFactory = (creds: PaymentProviderCredentials | null) => PaymentAdapter;
+
+function delay(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function mockAccount(ref: string, amount: number, customerName?: string): VirtualAccount {
+  const banks = ["GTBank", "Access Bank", "Zenith Bank", "UBA", "First Bank"] as const;
+  const bank = banks[Math.floor(Math.random() * banks.length)];
+  const acct = String(Math.floor(1000000000 + Math.random() * 8999999999));
+  return {
+    bankName: bank,
+    accountNumber: acct,
+    accountName: customerName ? `cheko: ${customerName}` : "Cheko Retail Store",
+    reference: ref,
+    amount,
+  };
+}
+
+function baseAdapter(
+  id: PaymentProviderId,
+  capabilities: PaymentProviderCapabilities,
+  creds: PaymentProviderCredentials | null
+): PaymentAdapter {
+  return {
+    id,
+    capabilities,
+    async verifyCredentials() {
+      if (!creds) return { ok: false, message: "No credentials saved" };
+      const hasKey = Boolean(creds.apiKey || creds.secretKey || creds.publicKey);
+      await delay(400);
+      return hasKey
+        ? { ok: true, message: `${id} credentials validated (demo mode)` }
+        : { ok: false, message: "Missing API keys" };
+    },
+    async createVirtualAccount(amount, ref, customerName) {
+      await delay(600);
+      return mockAccount(ref, amount, customerName);
+    },
+    async chargeCard(req) {
+      await delay(900);
+      return {
+        approved: true,
+        authCode: `${id.toUpperCase().slice(0, 3)}-${Math.floor(Math.random() * 900000 + 100000)}`,
+        cardMask: "****4242",
+        brand: "Verve",
+      };
+    },
+    async verifyTransfer(ref, amount) {
+      await delay(700);
+      void amount;
+      return { credited: true, sessionId: ref };
+    },
+  };
+}
+
+function limitedAdapter(
+  id: PaymentProviderId,
+  capabilities: PaymentProviderCapabilities,
+  creds: PaymentProviderCredentials | null
+): PaymentAdapter {
+  const base = baseAdapter(id, capabilities, creds);
+  return {
+    ...base,
+    async verifyTransfer(ref, amount) {
+      if (!capabilities.transferVerify) {
+        await delay(500);
+        return { credited: true, sessionId: ref };
+      }
+      return base.verifyTransfer(ref, amount);
+    },
+  };
+}
+
+export function createCheckoutNowAdapter(creds: PaymentProviderCredentials | null): PaymentAdapter {
+  return baseAdapter("checkoutnow", {
+    virtualAccount: true,
+    cardCharge: true,
+    transferVerify: true,
+    broadcastPay: true,
+  }, creds);
+}
+
+export function createMevonPayAdapter(creds: PaymentProviderCredentials | null): PaymentAdapter {
+  return limitedAdapter("mevonpay", {
+    virtualAccount: true,
+    cardCharge: true,
+    transferVerify: true,
+    broadcastPay: false,
+  }, creds);
+}
+
+export function createPaystackAdapter(creds: PaymentProviderCredentials | null): PaymentAdapter {
+  return limitedAdapter("paystack", {
+    virtualAccount: true,
+    cardCharge: true,
+    transferVerify: false,
+    broadcastPay: false,
+  }, creds);
+}
+
+export function createMoniepointAdapter(creds: PaymentProviderCredentials | null): PaymentAdapter {
+  return limitedAdapter("moniepoint", {
+    virtualAccount: true,
+    cardCharge: true,
+    transferVerify: false,
+    broadcastPay: false,
+  }, creds);
+}
+
+export function createSquadAdapter(creds: PaymentProviderCredentials | null): PaymentAdapter {
+  return limitedAdapter("squad", {
+    virtualAccount: true,
+    cardCharge: true,
+    transferVerify: false,
+    broadcastPay: false,
+  }, creds);
+}
+
+const factories: Record<PaymentProviderId, AdapterFactory> = {
+  checkoutnow: createCheckoutNowAdapter,
+  mevonpay: createMevonPayAdapter,
+  paystack: createPaystackAdapter,
+  moniepoint: createMoniepointAdapter,
+  squad: createSquadAdapter,
+};
+
+export function resolveAdapter(
+  provider: PaymentProviderId,
+  creds: PaymentProviderCredentials | null
+): PaymentAdapter {
+  return factories[provider](creds);
+}

@@ -7,3 +7,4 @@ export { useHotelManagement } from "./useHotelManagement";
 export type { HotelManagement } from "./useHotelManagement";
 export { useFlightBooking } from "./useFlightBooking";
 export type { FlightBookingManagement } from "./useFlightBooking";
+export { useBarcodeScanner } from "./useBarcodeScanner";

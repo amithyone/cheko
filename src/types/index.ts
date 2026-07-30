@@ -9,3 +9,4 @@ export * from "./chat";
 export * from "./common";
 export * from "./hotel";
 export * from "./flights";
+export * from "./payment-provider";

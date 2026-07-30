@@ -24,7 +24,10 @@ import {
   useTransactions,
   useHotelManagement,
   useFlightBooking,
+  useBarcodeScanner,
 } from "@/hooks";
+import type { Product } from "@/types";
+import { useNotice } from "@/context/NoticeContext";
 import type { CashDisbursementRecord, Transaction, UserRole, StaffAccount } from "@/types";
 import { INITIAL_STORES, INITIAL_TRANSACTIONS, INITIAL_CASH_POINT_HISTORY, INITIAL_STAFF_ACCOUNTS } from "@/mock";
 import type { Store } from "@/types";
@@ -48,6 +51,27 @@ export default function AppShell() {
   const { terminalAudits, setTerminalAudits, applyPaymentToTerminal } = useTerminalAudits();
   const { transactions, totalRevenue, setTotalRevenue, appendTransaction } =
     useTransactions(INITIAL_TRANSACTIONS);
+  const notice = useNotice();
+
+  useBarcodeScanner({
+    enabled: nav.currentTab === "checkout" && isAuthenticated,
+    products: catalog.activeProducts,
+    onScanProduct: (product: Product) => {
+      cart.setCart((prev) => {
+        const existing = prev.find((i) => i.product.sku === product.sku);
+        if (existing) {
+          return prev.map((i) =>
+            i.product.sku === product.sku ? { ...i, quantity: i.quantity + 1 } : i
+          );
+        }
+        return [...prev, { product, quantity: 1, selectedSize: product.size }];
+      });
+      notice.showToast(`Scanned: ${product.name}`, "success");
+    },
+    onUnknownBarcode: (barcode) => {
+      notice.showWarning(`Unknown barcode: ${barcode}`, "Scan failed");
+    },
+  });
 
   useEffect(() => {
     const revenueInterval = setInterval(() => {

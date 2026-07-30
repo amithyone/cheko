@@ -1,0 +1,16 @@
+appId: com.checkoutnow.cheko
+productName: Cheko POS
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  shortcutName: Cheko POS

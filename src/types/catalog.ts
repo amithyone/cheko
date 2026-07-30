@@ -24,6 +24,10 @@ export interface Product {
   segment: "Footwear" | "Apparel" | "Accessories" | "Limited";
   tags?: string[];
   variations?: { id: string; size: string; color: string; stock: number }[];
+  barcode?: string;
+  plu?: string;
+  soldByWeight?: boolean;
+  pricePerKg?: number;
 }
 
 export type BusinessType = "Supermarket" | "Restaurant" | "Services" | "Hotels" | "Flights";

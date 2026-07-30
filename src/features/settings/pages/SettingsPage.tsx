@@ -15,6 +15,8 @@ import { InteractionModeToggle } from "@/shared/ui";
 import { useInteractionMode } from "@/context/InteractionModeContext";
 import { DesignerCredit } from "@/shared/layout/DesignerCredit";
 import { AccountManagerPanel } from "../components/AccountManagerPanel";
+import { PaymentProviderPanel } from "../components/PaymentProviderPanel";
+import { DesktopHardwarePanel } from "../components/DesktopHardwarePanel";
 
 interface SettingsViewProps {
   currencySymbol: string;
@@ -264,6 +266,10 @@ export default function SettingsView({
       </div>
 
       <DesignerCredit variant="block" className="max-w-xl" />
+
+      <PaymentProviderPanel onSaved={showToast} />
+
+      <DesktopHardwarePanel onSaved={showToast} />
 
       <AccountManagerPanel
         accounts={staffAccounts}
