@@ -14,6 +14,7 @@ import {
   PAYMENT_PROVIDERS,
   type PaymentProviderCredentials,
   type PaymentProviderId,
+  type SignatureAlg,
 } from "@/types/payment-provider";
 import { usePaymentProvider } from "@/context/PaymentProviderContext";
 import { getCapabilities } from "@/shared/payments/capabilities";
@@ -73,6 +74,12 @@ export function PaymentProviderPanel({ onSaved }: PaymentProviderPanelProps) {
       merchantId: form.merchantId,
       contractCode: form.contractCode,
       signingKey: form.signingKey,
+      merchantBankName: form.merchantBankName,
+      maskedAccountSuffix: form.maskedAccountSuffix,
+      signatureAlg:
+        provider === "checkoutnow"
+          ? (form.signatureAlg ?? "ed25519")
+          : form.signatureAlg,
       webhookSecret: form.webhookSecret,
     };
     await saveCredentials(creds);
@@ -214,6 +221,31 @@ export function PaymentProviderPanel({ onSaved }: PaymentProviderPanelProps) {
                 )}
               </div>
             ))}
+            {provider === "checkoutnow" && (
+              <div className="sm:col-span-2 space-y-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Signature algorithm (Pay at Shop)
+                </label>
+                <select
+                  value={form.signatureAlg ?? "ed25519"}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      signatureAlg: e.target.value as SignatureAlg,
+                    }))
+                  }
+                  className="w-full max-w-md rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+                >
+                  <option value="ed25519">ed25519 — CheckoutNow Pay at Shop (recommended)</option>
+                  <option value="HMAC-SHA256">HMAC-SHA256 — open protocol / local dev only</option>
+                </select>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  In CheckoutNow → Pay at Shop → <strong>Regenerate signing key</strong> (Ed25519, shown once).
+                  Settlement bank: <strong>RUBIES MFB</strong>, suffix <strong>***4863</strong> for terminal CP-1RK8Z.
+                  Do not use SDK defaults (kuda / ***9876 / HMAC-SHA256).
+                </p>
+              </div>
+            )}
             <label className="flex items-center gap-2 text-sm font-medium text-slate-600 self-end pb-2">
               <input
                 type="checkbox"

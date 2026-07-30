@@ -37,6 +37,31 @@ const chekoHardware = {
 
   savePaymentConfig: (creds: PaymentProviderCredentials) =>
     ipcRenderer.invoke("payment:saveConfig", creds) as Promise<PaymentConfigSummary>,
+
+  getBroadcastHealth: () =>
+    ipcRenderer.invoke("broadcast:health") as Promise<{
+      ok: boolean;
+      sdkInstalled: boolean;
+      transport: string;
+      activeSession: string | null;
+      terminalId: string;
+    }>,
+
+  startBroadcast: (options: {
+    amountNgn: number;
+    itemCount: number;
+    mode: "public" | "checkout";
+  }) =>
+    ipcRenderer.invoke("broadcast:start", options) as Promise<{
+      ok: boolean;
+      sessionId?: string;
+      transport?: string;
+      mode?: "public" | "checkout";
+      error?: string;
+    }>,
+
+  stopBroadcast: () =>
+    ipcRenderer.invoke("broadcast:stop") as Promise<{ ok: boolean }>,
 };
 
 contextBridge.exposeInMainWorld("chekoHardware", chekoHardware);

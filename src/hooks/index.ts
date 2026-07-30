@@ -8,3 +8,5 @@ export type { HotelManagement } from "./useHotelManagement";
 export { useFlightBooking } from "./useFlightBooking";
 export type { FlightBookingManagement } from "./useFlightBooking";
 export { useBarcodeScanner } from "./useBarcodeScanner";
+export { useBroadcastPay } from "./useBroadcastPay";
+export { useParkedPayments } from "./useParkedPayments";

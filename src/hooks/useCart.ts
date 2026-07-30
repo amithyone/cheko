@@ -1,26 +1,40 @@
 import { useState, useCallback } from "react";
 import type { CartItem, ParkedCart } from "@/types";
+import { computeCartTotals } from "@/shared/utils/cart-totals";
+import { roundMoney } from "@/shared/utils/money";
 
-const TAX_RATE = 0.085;
+/** Amount + items locked when cashier taps Execute Payment. */
+export interface ChargeSnapshot {
+  amount: number;
+  itemCount: number;
+}
 
 export function useCart() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [parkedCarts, setParkedCarts] = useState<ParkedCart[]>([]);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
-  const [customChargeAmount, setCustomChargeAmount] = useState<number | null>(null);
+  const [chargeSnapshot, setChargeSnapshot] = useState<ChargeSnapshot | null>(null);
 
-  const subtotal = cart.reduce((acc, curr) => acc + curr.product.price * curr.quantity, 0);
-  const tax = subtotal * TAX_RATE;
-  const total = subtotal + tax;
+  const { subtotal, tax, total, itemCount } = computeCartTotals(cart);
 
-  const triggerCharge = useCallback((tenderedAmt?: number) => {
-    setCustomChargeAmount(tenderedAmt !== undefined ? tenderedAmt : null);
-    setIsTerminalOpen(true);
-  }, []);
+  const triggerCharge = useCallback(
+    (tenderedAmt?: number, itemsOverride?: CartItem[]) => {
+      const source = itemsOverride ?? cart;
+      const live = computeCartTotals(source);
+      const amount =
+        tenderedAmt !== undefined ? roundMoney(tenderedAmt) : live.total;
+      setChargeSnapshot({
+        amount,
+        itemCount: live.itemCount,
+      });
+      setIsTerminalOpen(true);
+    },
+    [cart]
+  );
 
   const closeTerminal = useCallback(() => {
     setIsTerminalOpen(false);
-    setCustomChargeAmount(null);
+    setChargeSnapshot(null);
   }, []);
 
   const parkCart = useCallback(
@@ -50,7 +64,9 @@ export function useCart() {
 
   const clearCart = useCallback(() => setCart([]), []);
 
-  const currentDueAmount = customChargeAmount !== null ? customChargeAmount : total;
+  /** Active cart total at Execute Payment — not a live recalc while modal is open. */
+  const currentDueAmount = chargeSnapshot?.amount ?? total;
+  const currentItemCount = chargeSnapshot?.itemCount ?? itemCount;
 
   return {
     cart,
@@ -63,9 +79,11 @@ export function useCart() {
     subtotal,
     tax,
     total,
+    itemCount,
     isTerminalOpen,
-    customChargeAmount,
+    chargeSnapshot,
     currentDueAmount,
+    currentItemCount,
     triggerCharge,
     closeTerminal,
   };

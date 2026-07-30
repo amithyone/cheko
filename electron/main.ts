@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from "electron";
 import path from "path";
 import { registerHardwareIpc } from "./ipc/hardware";
+import { registerBroadcastIpc } from "./ipc/broadcast";
+import { shutdownSidecar } from "./hardware/broadcast-client";
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
@@ -21,6 +23,7 @@ function createWindow(): void {
   });
 
   registerHardwareIpc(() => mainWindow);
+  registerBroadcastIpc();
 
   if (process.argv.includes("--kiosk")) {
     mainWindow.setFullScreen(true);
@@ -50,4 +53,8 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  shutdownSidecar();
 });

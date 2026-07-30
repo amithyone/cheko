@@ -39,4 +39,9 @@ export interface ChekoHardwareBridge {
   savePaymentConfig?(
     creds: import("@/types/payment-provider").PaymentProviderCredentials
   ): Promise<import("@/types/payment-provider").PaymentConfigSummary>;
+  getBroadcastHealth?(): Promise<import("@/shared/broadcast/types").BroadcastHealth>;
+  startBroadcast?(
+    options: import("@/shared/broadcast/types").BroadcastStartOptions
+  ): Promise<import("@/shared/broadcast/types").BroadcastStartResult>;
+  stopBroadcast?(): Promise<{ ok: boolean }>;
 }

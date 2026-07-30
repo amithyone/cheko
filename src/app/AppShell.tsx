@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Sidebar from "@/shared/layout/Sidebar";
 import Header from "@/shared/layout/Header";
 import LoginPage from "@/features/auth/pages/LoginPage";
@@ -14,10 +14,12 @@ import ManagerChatPage from "@/features/chat/pages/ManagerChatPage";
 import AuditPage from "@/features/audit/pages/AuditPage";
 import SettingsPage from "@/features/settings/pages/SettingsPage";
 import TerminalPayModal from "@/features/pos/terminal/TerminalPayModal";
+import { ParkedPaymentPoller } from "@/features/pos/components/ParkedPaymentPoller";
 import { DesignerCredit } from "@/shared/layout/DesignerCredit";
 import {
   useAppNavigation,
   useCart,
+  useParkedPayments,
   useCatalog,
   useChat,
   useTerminalAudits,
@@ -28,7 +30,7 @@ import {
 } from "@/hooks";
 import type { Product } from "@/types";
 import { useNotice } from "@/context/NoticeContext";
-import type { CashDisbursementRecord, Transaction, UserRole, StaffAccount } from "@/types";
+import type { CashDisbursementRecord, Transaction, UserRole, StaffAccount, ParkedPayment, ParkedPaymentSnapshot } from "@/types";
 import { INITIAL_STORES, INITIAL_TRANSACTIONS, INITIAL_CASH_POINT_HISTORY, INITIAL_STAFF_ACCOUNTS } from "@/mock";
 import type { Store } from "@/types";
 
@@ -45,6 +47,9 @@ export default function AppShell() {
   const nav = useAppNavigation();
   const catalog = useCatalog();
   const cart = useCart();
+  const parked = useParkedPayments();
+  const [resumePayment, setResumePayment] = useState<ParkedPayment | null>(null);
+  const [terminalSessionKey, setTerminalSessionKey] = useState(0);
   const chat = useChat();
   const hotel = useHotelManagement();
   const flightBooking = useFlightBooking();
@@ -102,8 +107,44 @@ export default function AppShell() {
     applyPaymentToTerminal(method, processedTotal);
     cart.clearCart();
     cart.closeTerminal();
+    setResumePayment(null);
     nav.setCurrentTab("checkout");
   };
+
+  const handleParkPayment = (snapshot: ParkedPaymentSnapshot) => {
+    parked.parkPayment(snapshot);
+    cart.clearCart();
+    cart.closeTerminal();
+    setResumePayment(null);
+    setTerminalSessionKey((k) => k + 1);
+  };
+
+  const handleResumeParkedPayment = (payment: ParkedPayment) => {
+    cart.setCart(payment.items);
+    setResumePayment(payment);
+    parked.dismissParkedPayment(payment.id);
+    cart.triggerCharge(payment.totalDue, payment.items);
+    setTerminalSessionKey((k) => k + 1);
+  };
+
+  const handleParkedPaymentComplete = useCallback(
+    (payment: ParkedPayment, method: string) => {
+      parked.completeParkedPayment(payment.id);
+      appendTransaction({
+        id: `tx-parked-${Math.floor(Math.random() * 800) + 100}`,
+        productName: `${payment.label} (parked)`,
+        amount: payment.totalDue,
+        terminalName: "TERMINAL_04_ONLINE",
+        timestamp: "JUST NOW",
+      });
+      catalog.decrementStockForCart(
+        payment.items.map((item) => ({ sku: item.product.sku, quantity: item.quantity }))
+      );
+      applyPaymentToTerminal(method, payment.totalDue);
+      notice.showToast(`Parked payment completed — ${payment.label}`, "success");
+    },
+    [parked, appendTransaction, catalog, applyPaymentToTerminal, notice]
+  );
 
   const handleAutoAddTransaction = (productName: string, amount: number) => {
     appendTransaction({
@@ -127,6 +168,11 @@ export default function AppShell() {
     );
   }
 
+  const handleOpenParkedFromNav = (payment: ParkedPayment) => {
+    nav.setCurrentTab("checkout");
+    handleResumeParkedPayment(payment);
+  };
+
   const headerDetails = nav.getHeaderDetails(userRole, nav.currentTab);
 
   return (
@@ -149,6 +195,10 @@ export default function AppShell() {
           setSearchQuery={nav.setSearchQuery}
           title={headerDetails.title}
           userRole={headerDetails.role}
+          parkedPayments={parked.parkedPayments}
+          currencySymbol={currencySymbol}
+          onOpenParkedPayment={handleOpenParkedFromNav}
+          onDismissParkedPayment={parked.dismissParkedPayment}
         />
 
         <div className="p-8 flex-1">
@@ -195,6 +245,9 @@ export default function AppShell() {
               onParkCart={cart.parkCart}
               onResumeCart={cart.resumeCart}
               onDeleteParkedCart={cart.deleteParkedCart}
+              parkedPayments={parked.parkedPayments}
+              onResumeParkedPayment={handleResumeParkedPayment}
+              onDismissParkedPayment={parked.dismissParkedPayment}
               chatMessages={chat.chatMessages}
               onSendChatMessage={chat.sendCashierMessage}
               currencySymbol={currencySymbol}
@@ -279,12 +332,21 @@ export default function AppShell() {
         <DesignerCredit variant="footer" />
       </main>
 
+      <ParkedPaymentPoller
+        payments={parked.parkedPayments}
+        onComplete={handleParkedPaymentComplete}
+      />
+
       {cart.isTerminalOpen && (
         <TerminalPayModal
+          key={terminalSessionKey}
           totalDue={cart.currentDueAmount}
+          itemCount={cart.currentItemCount}
           cart={cart.cart}
+          resumePayment={resumePayment}
           onCancel={cart.closeTerminal}
           onSuccess={handlePaymentSuccess}
+          onParkPayment={handleParkPayment}
           currencySymbol={currencySymbol}
         />
       )}

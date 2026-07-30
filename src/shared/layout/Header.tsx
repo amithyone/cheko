@@ -1,15 +1,30 @@
 import { Search, Bell } from "lucide-react";
 import { useNotice } from "@/context/NoticeContext";
 import { InteractionModeToggle } from "@/shared/ui";
+import { ParkedPaymentsNav } from "@/shared/layout/ParkedPaymentsNav";
+import type { ParkedPayment } from "@/types";
 
 interface HeaderProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   title: string;
   userRole?: string;
+  parkedPayments?: ParkedPayment[];
+  currencySymbol?: string;
+  onOpenParkedPayment?: (payment: ParkedPayment) => void;
+  onDismissParkedPayment?: (id: string) => void;
 }
 
-export default function Header({ searchQuery, setSearchQuery, title, userRole = "Store Manager" }: HeaderProps) {
+export default function Header({
+  searchQuery,
+  setSearchQuery,
+  title,
+  userRole = "Store Manager",
+  parkedPayments = [],
+  currencySymbol = "₦",
+  onOpenParkedPayment,
+  onDismissParkedPayment,
+}: HeaderProps) {
   const notice = useNotice();
 
   return (
@@ -31,6 +46,15 @@ export default function Header({ searchQuery, setSearchQuery, title, userRole = 
       </div>
 
       <div className="flex items-center gap-4">
+        {onOpenParkedPayment && onDismissParkedPayment && (
+          <ParkedPaymentsNav
+            payments={parkedPayments}
+            currencySymbol={currencySymbol}
+            onOpen={onOpenParkedPayment}
+            onDismiss={onDismissParkedPayment}
+          />
+        )}
+
         <div className="px-4 py-1.5 bg-slate-50 border border-slate-100 rounded-full flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
           <span className="font-sans text-xs font-semibold text-slate-600 tracking-wider">

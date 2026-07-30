@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { Product, CartItem, BusinessType, ParkedCart, ChatMessage, ADMIN_TENDER_OVERRIDE_CODE } from "@/types";
+import { Product, CartItem, BusinessType, ParkedCart, ParkedPayment, ChatMessage, ADMIN_TENDER_OVERRIDE_CODE } from "@/types";
 import { AdminUnlockModal } from "../modals/AdminUnlockModal";
 import { ParkCartModal } from "../modals/ParkCartModal";
 import { CartPanel } from "../components/CartPanel";
+import { BroadcastStatusBar } from "../components/BroadcastStatusBar";
 import { ProductPicker } from "../components/ProductPicker";
 import { IntercomDrawer } from "../components/IntercomDrawer";
 import { useCheckoutTotals } from "../hooks/useCheckoutTotals";
+import { roundMoney } from "@/shared/utils/money";
 import { useNotice } from "@/context/NoticeContext";
 import type { HotelManagement } from "@/hooks/useHotelManagement";
 import type { FlightBookingManagement } from "@/hooks/useFlightBooking";
@@ -21,6 +23,9 @@ interface CheckoutViewProps {
   onParkCart: (customerName: string) => void;
   onResumeCart: (cart: ParkedCart) => void;
   onDeleteParkedCart: (id: string) => void;
+  parkedPayments?: ParkedPayment[];
+  onResumeParkedPayment?: (payment: ParkedPayment) => void;
+  onDismissParkedPayment?: (id: string) => void;
   chatMessages: ChatMessage[];
   onSendChatMessage: (text: string) => void;
   currencySymbol?: string;
@@ -39,6 +44,9 @@ export default function CheckoutView({
   onParkCart,
   onResumeCart,
   onDeleteParkedCart,
+  parkedPayments = [],
+  onResumeParkedPayment,
+  onDismissParkedPayment,
   chatMessages,
   onSendChatMessage,
   currencySymbol = "₦",
@@ -142,6 +150,13 @@ export default function CheckoutView({
 
   return (
     <div className="flex flex-col xl:flex-row h-[calc(100vh-100px)] overflow-hidden -mx-8 -my-8 bg-slate-100/50 relative">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4">
+        <BroadcastStatusBar
+          enabled
+          amountNgn={Math.max(0.01, roundMoney(total))}
+          itemCount={Math.max(1, cart.reduce((n, i) => n + i.quantity, 0))}
+        />
+      </div>
 
       <ProductPicker
         products={products}
@@ -173,6 +188,9 @@ export default function CheckoutView({
         onShowParkModal={() => setShowParkModal(true)}
         onResumeCart={onResumeCart}
         onDeleteParkedCart={onDeleteParkedCart}
+        parkedPayments={parkedPayments}
+        onResumeParkedPayment={onResumeParkedPayment}
+        onDismissParkedPayment={onDismissParkedPayment}
         onAdjustQuantity={handleAdjustQuantity}
         onAddToCart={handleAddToCart}
         onRemoveFromCart={handleRemoveFromCart}

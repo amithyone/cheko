@@ -10,24 +10,30 @@ import {
   CheckCircle,
   Loader2,
   Sparkles,
+  Clock,
   CreditCard,
   Radio,
   Wallet,
   ChevronRight,
   X,
 } from "lucide-react";
-import { CartItem } from "@/types";
+import { CartItem, type ParkedPayment, type ParkedPaymentSnapshot } from "@/types";
+import { ParkPaymentModal } from "@/features/pos/checkout/modals/ParkPaymentModal";
 import { useNotice } from "@/context/NoticeContext";
 import {
   usePaymentProvider,
   providerSupportsMethod,
 } from "@/context/PaymentProviderContext";
+import { useBroadcastPay } from "@/hooks/useBroadcastPay";
+import { BROADCAST_MODE_LABELS, loadBroadcastSettings } from "@/shared/broadcast/settings";
+import { formatTerminalPickerLabel } from "@/shared/broadcast/terminalLabel";
 import { hardwareBridge } from "@/shared/hardware/bridge";
 import { buildReceiptPayload, printReceipt } from "./api";
 import type { VirtualAccount } from "@/types/payment-provider";
 import {
   type PayMethod,
   type PaymentPhase,
+  isParkablePaymentPhase,
   SPLIT_CASH_RATIO,
   SPLIT_TRANSFER_1_RATIO,
   SPLIT_TRANSFER_2_RATIO,
@@ -35,9 +41,12 @@ import {
 
 interface TerminalPayModalProps {
   totalDue: number;
+  itemCount: number;
   cart: CartItem[];
   onCancel: () => void;
   onSuccess: (method: string, processedTotal: number) => void;
+  onParkPayment: (snapshot: ParkedPaymentSnapshot) => void;
+  resumePayment?: ParkedPayment | null;
   currencySymbol?: string;
 }
 
@@ -47,32 +56,71 @@ function roundMoney(n: number) {
 
 export default function TerminalPayModal({
   totalDue,
+  itemCount,
   cart,
   onCancel,
   onSuccess,
+  onParkPayment,
+  resumePayment = null,
   currencySymbol = "₦",
 }: TerminalPayModalProps) {
   const notice = useNotice();
   const { adapter, capabilities, summary } = usePaymentProvider();
-  const [phase, setPhase] = useState<PaymentPhase>("select_method");
-  const [selectedMethod, setSelectedMethod] = useState<PayMethod | null>(null);
+  const [phase, setPhase] = useState<PaymentPhase>(() => resumePayment?.phase ?? "select_method");
+  const [selectedMethod, setSelectedMethod] = useState<PayMethod | null>(
+    () => resumePayment?.method ?? null
+  );
   const [printStatus, setPrintStatus] = useState<"none" | "printing" | "printed">("none");
   const [apiPulse, setApiPulse] = useState(false);
-  const [virtualAccount, setVirtualAccount] = useState<VirtualAccount | null>(null);
+  const [virtualAccount, setVirtualAccount] = useState<VirtualAccount | null>(
+    () => resumePayment?.virtualAccount ?? null
+  );
   const [processing, setProcessing] = useState(false);
+  const [showParkPaymentModal, setShowParkPaymentModal] = useState(false);
+  const [parkPaymentLabel, setParkPaymentLabel] = useState("");
 
   const [cashReceivedInput, setCashReceivedInput] = useState("");
   const [splitCashReceivedInput, setSplitCashReceivedInput] = useState("");
   const [transferRef] = useState(
-    () => `TRF-${Math.floor(Math.random() * 900000) + 100000}`
+    () => resumePayment?.transferRef ?? `TRF-${Math.floor(Math.random() * 900000) + 100000}`
   );
   const [nfcAuthRef] = useState(
-    () => `NFC-${Math.floor(Math.random() * 900000) + 100000}`
+    () => resumePayment?.nfcAuthRef ?? `NFC-${Math.floor(Math.random() * 900000) + 100000}`
   );
 
-  const [splitStepsDone, setSplitStepsDone] = useState({ cash: false, t1: false, t2: false });
+  const [splitStepsDone, setSplitStepsDone] = useState(
+    () => resumePayment?.splitStepsDone ?? { cash: false, t1: false, t2: false }
+  );
+  const [broadcastSettings] = useState(() => loadBroadcastSettings());
+  const [broadcastToggleOn, setBroadcastToggleOn] = useState(
+    () => loadBroadcastSettings().defaultEnabled
+  );
 
-  const totalItems = cart.reduce((acc, curr) => acc + curr.quantity, 0);
+  const totalItems = itemCount;
+  const broadcastActive =
+    capabilities.broadcastPay &&
+    broadcastToggleOn &&
+    phase !== "success" &&
+    (broadcastSettings.mode === "public" ||
+      (broadcastSettings.mode === "checkout" &&
+        (phase === "select_method" ||
+          (phase === "transfer_await" && selectedMethod === "Bank Transfer"))));
+
+  const {
+    status: broadcastStatus,
+    sessionId: broadcastSessionId,
+    transport: broadcastTransport,
+    activeMode: broadcastActiveMode,
+    error: broadcastError,
+    stop: stopBroadcast,
+    handOff: handOffBroadcast,
+    markPaid: markBroadcastPaid,
+  } = useBroadcastPay({
+    enabled: broadcastActive,
+    mode: broadcastSettings.mode,
+    amountNgn: roundMoney(totalDue),
+    itemCount: totalItems,
+  });
   const splitCashDue = roundMoney(totalDue * SPLIT_CASH_RATIO);
   const splitTransfer1Due = roundMoney(totalDue * SPLIT_TRANSFER_1_RATIO);
   const splitTransfer2Due = roundMoney(totalDue * SPLIT_TRANSFER_2_RATIO);
@@ -80,7 +128,13 @@ export default function TerminalPayModal({
   const formatMoney = (n: number) =>
     `${currencySymbol}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const terminalLabel = formatTerminalPickerLabel(summary.terminalId ?? "TERM-01");
+
   const finishSuccess = useCallback(async () => {
+    if (broadcastSessionId) {
+      await markBroadcastPaid();
+    }
+    await stopBroadcast();
     if (selectedMethod && printStatus === "none") {
       setPrintStatus("printing");
       try {
@@ -99,7 +153,7 @@ export default function TerminalPayModal({
       }
     }
     setPhase("success");
-  }, [selectedMethod, printStatus, cart, totalDue, currencySymbol, transferRef, summary.terminalId]);
+  }, [selectedMethod, printStatus, cart, totalDue, currencySymbol, transferRef, summary.terminalId, stopBroadcast, broadcastSessionId, markBroadcastPaid]);
 
   const completeAndReturn = useCallback(() => {
     if (selectedMethod) {
@@ -289,15 +343,64 @@ export default function TerminalPayModal({
       : 0;
 
   const backToMethods = () => {
+    void stopBroadcast();
     setPhase("select_method");
     setSelectedMethod(null);
   };
+
+  const submitParkPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const broadcastingOnMethodSelect =
+      phase === "select_method" && broadcastToggleOn && broadcastStatus === "broadcasting";
+    const canPark =
+      broadcastingOnMethodSelect || (isParkablePaymentPhase(phase) && Boolean(selectedMethod));
+    if (!canPark) return;
+
+    const label = parkPaymentLabel.trim() || `Payment ${formatMoney(totalDue)}`;
+    await handOffBroadcast();
+    onParkPayment({
+      label,
+      items: [...cart],
+      totalDue,
+      method: selectedMethod ?? "Bank Transfer",
+      phase: phase === "select_method" ? "select_method" : phase,
+      transferRef,
+      nfcAuthRef,
+      virtualAccount,
+      broadcastSessionId: broadcastSessionId ?? resumePayment?.broadcastSessionId ?? null,
+      splitStepsDone,
+    });
+    setShowParkPaymentModal(false);
+    setParkPaymentLabel("");
+    notice.showToast(`Payment parked — ${label}. Serve next customer.`, "success");
+    onCancel();
+  };
+
+  const showParkPayment =
+    (phase === "select_method" &&
+      broadcastToggleOn &&
+      (broadcastStatus === "broadcasting" || broadcastStatus === "starting")) ||
+    (isParkablePaymentPhase(phase) && phase !== "select_method" && Boolean(selectedMethod));
+
+  const parkPaymentButton = showParkPayment ? (
+    <button
+      type="button"
+      onClick={() => setShowParkPaymentModal(true)}
+      className="w-full py-3 border-2 border-dashed border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2"
+    >
+      <Clock className="w-4 h-4" />
+      Park &amp; serve next customer
+    </button>
+  ) : null;
+
+  const parkPaymentAction = phase !== "select_method" ? parkPaymentButton : null;
 
   const renderWaitingPanel = (
     title: string,
     subtitle: string,
     icon: ReactNode,
-    children: ReactNode
+    children: ReactNode,
+    footer?: ReactNode
   ) => (
     <motion.div
       key={phase}
@@ -317,6 +420,8 @@ export default function TerminalPayModal({
         </p>
       )}
       {children}
+      {footer}
+      {parkPaymentAction}
       <button
         type="button"
         onClick={backToMethods}
@@ -359,6 +464,63 @@ export default function TerminalPayModal({
                   {totalItems} {totalItems === 1 ? "item" : "items"} in basket
                 </p>
               </div>
+
+              {capabilities.broadcastPay && (
+                <div className="max-w-lg mx-auto bg-white border border-slate-200 rounded-2xl p-4 text-left shadow-sm space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <Radio className="w-4 h-4 text-sky-500" />
+                      <span className="text-sm font-bold text-slate-800">Checkout Broadcast</span>
+                      {broadcastActive && broadcastStatus === "broadcasting" && (
+                        <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={broadcastToggleOn}
+                      onClick={() => setBroadcastToggleOn((v) => !v)}
+                      className={`relative w-12 h-7 rounded-full transition-colors cursor-pointer ${
+                        broadcastToggleOn ? "bg-sky-500" : "bg-slate-200"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                          broadcastToggleOn ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {BROADCAST_MODE_LABELS[broadcastSettings.mode].description}
+                  </p>
+                  {broadcastToggleOn && broadcastStatus === "broadcasting" && (
+                    <p className="text-[10px] font-mono text-sky-700 bg-sky-50 border border-sky-100 rounded-lg px-3 py-2">
+                      {broadcastActiveMode === "public"
+                        ? "Public merchant beacon active — nearby phones can discover this terminal."
+                        : `Checkout broadcast active — ${formatMoney(totalDue)} locked for ${totalItems} item(s).`}
+                      {(broadcastTransport === "simulated" || broadcastTransport === "embedded") && (
+                        <span className="block text-amber-700 mt-1">
+                          SIMULATED — your phone app will not receive until BLE radio is live (transport: ble).
+                        </span>
+                      )}
+                      {broadcastSessionId && (
+                        <span className="block mt-1 opacity-70">
+                          Terminal {terminalLabel} · session {broadcastSessionId.slice(0, 8)}… ·{" "}
+                          {broadcastTransport}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {broadcastToggleOn && broadcastStatus === "error" && (
+                    <p className="text-[10px] text-red-600">{broadcastError}</p>
+                  )}
+                  <p className="text-[10px] text-slate-400">
+                    Mode: {BROADCAST_MODE_LABELS[broadcastSettings.mode].title} · change in Settings
+                  </p>
+                  {parkPaymentButton}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-5xl mx-auto px-2">
                 {methodButtons.map(({ method, enabled }) => {
@@ -539,15 +701,51 @@ export default function TerminalPayModal({
                 <Landmark className="w-14 h-14 text-indigo-500" />
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full animate-ping" />
               </div>,
-              <button
-                type="button"
-                disabled={processing}
-                onClick={() => void handleTransferApiConfirmed()}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                <Radio className="w-4 h-4" />
-                {processing ? "Verifying…" : "Simulate transfer received (API)"}
-              </button>
+              <>
+                {capabilities.broadcastPay && broadcastToggleOn && (
+                  <div
+                    className={`rounded-xl border px-4 py-3 text-left text-xs space-y-1 ${
+                      broadcastStatus === "broadcasting"
+                        ? "bg-sky-50 border-sky-200 text-sky-800"
+                        : broadcastStatus === "error"
+                          ? "bg-red-50 border-red-200 text-red-700"
+                          : "bg-slate-50 border-slate-200 text-slate-600"
+                    }`}
+                  >
+                    <p className="font-bold uppercase tracking-wide flex items-center gap-2">
+                      <Radio className="w-3.5 h-3.5" />
+                      {broadcastActiveMode === "public" ? "Public merchant broadcast" : "Checkout broadcast"}
+                      {broadcastStatus === "broadcasting" && (
+                        <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+                      )}
+                    </p>
+                    {broadcastStatus === "starting" && <p>Starting sidecar…</p>}
+                    {broadcastStatus === "broadcasting" && broadcastActiveMode === "public" && (
+                      <p>
+                        Merchant account beacon active via {broadcastTransport}. Customer can open banking app nearby to pay any amount.
+                      </p>
+                    )}
+                    {broadcastStatus === "broadcasting" && broadcastActiveMode === "checkout" && (
+                      <p>
+                        Broadcasting {formatMoney(totalDue)} via {broadcastTransport}. Amount is signed — customer phone pre-fills transfer.
+                      </p>
+                    )}
+                    {broadcastStatus === "error" && (
+                      <p>{broadcastError ?? "Broadcast unavailable — customer can still pay manually."}</p>
+                    )}
+                    {broadcastStatus === "idle" && <p>Broadcast will start when sidecar is ready.</p>}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={processing}
+                  onClick={() => void handleTransferApiConfirmed()}
+                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <Radio className="w-4 h-4" />
+                  {processing ? "Verifying…" : "Simulate transfer received (API)"}
+                </button>
+              </>
             )}
 
           {phase === "split_overview" && (
@@ -739,6 +937,15 @@ export default function TerminalPayModal({
           </button>
         )}
       </div>
+
+      <ParkPaymentModal
+        open={showParkPaymentModal}
+        label={parkPaymentLabel}
+        onLabelChange={setParkPaymentLabel}
+        amountLabel={formatMoney(totalDue)}
+        onSubmit={(e) => void submitParkPayment(e)}
+        onClose={() => setShowParkPaymentModal(false)}
+      />
     </div>
   );
 }

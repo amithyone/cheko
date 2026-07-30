@@ -14,3 +14,7 @@ win:
         - x64
 nsis:
   shortcutName: Cheko POS
+npmRebuild: false
+extraResources:
+  - broadcast-sidecar/**/*
+  - vendor/checkout_broadcast/sdk/python/**/*

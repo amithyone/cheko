@@ -7,6 +7,7 @@ import {
   savePaymentCredentials,
   saveTerminalConfig,
 } from "./config";
+import { resetExternalSidecarCache, shutdownSidecar } from "../hardware/broadcast-client";
 import { listPrinters, openCashDrawer, printReceipt } from "../hardware/escpos";
 import { getScaleWeight } from "../hardware/scale";
 import { emitTestScan, registerScannerIpc } from "../hardware/scanner";
@@ -47,7 +48,10 @@ export function registerHardwareIpc(getWindow: () => BrowserWindow | null): void
   });
 
   ipcMain.handle("payment:saveConfig", async (_e, creds: PaymentProviderCredentials) => {
-    return savePaymentCredentials(creds);
+    const summary = savePaymentCredentials(creds);
+    shutdownSidecar();
+    resetExternalSidecarCache();
+    return summary;
   });
 
   ipcMain.handle("hardware:testScan", async (_e, barcode: string) => {

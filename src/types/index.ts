@@ -10,3 +10,4 @@ export * from "./common";
 export * from "./hotel";
 export * from "./flights";
 export * from "./payment-provider";
+export * from "./parked-payment";

@@ -1,0 +1,112 @@
+"""Load CheckoutNow credentials from Cheko Settings (cheko-config.json)."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+
+def config_path() -> Path:
+    appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+    return Path(appdata) / "Cheko POS" / "cheko-config.json"
+
+
+def load_payment_store() -> dict[str, Any]:
+    path = config_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        payment = data.get("payment")
+        return payment if isinstance(payment, dict) else {}
+    except Exception:
+        return {}
+
+
+def resolve_credential(
+    *,
+    store: dict[str, Any],
+    env_key: str,
+    store_key: str,
+    default: str = "",
+) -> tuple[str, str]:
+    """
+    Pick credential value and its source label.
+    Cheko Settings file wins over env (unless CHEKO_FORCE_ENV=1).
+    """
+    force_env = os.environ.get("CHEKO_FORCE_ENV") == "1"
+    env_val = os.environ.get(env_key, "").strip()
+    store_val = store.get(store_key)
+    store_str = str(store_val).strip() if store_val is not None else ""
+
+    if force_env and env_val:
+        return env_val, "env"
+    if store_str:
+        return store_str, "cheko-config"
+    if env_val:
+        return env_val, "env"
+    return default, "default"
+
+
+def build_broadcast_config() -> dict[str, str]:
+    store = load_payment_store()
+    terminal_id, _ = resolve_credential(
+        store=store,
+        env_key="CHEKO_TERMINAL_ID",
+        store_key="terminalId",
+        default="POS-LAG-001",
+    )
+    signing_key, _ = resolve_credential(
+        store=store,
+        env_key="CHEKO_SIGNING_KEY",
+        store_key="signingKey",
+        default="",
+    )
+    signature_alg, sig_src = resolve_credential(
+        store=store,
+        env_key="CHEKO_SIGNATURE_ALG",
+        store_key="signatureAlg",
+        default="ed25519",
+    )
+    bank_name, bank_src = resolve_credential(
+        store=store,
+        env_key="CHEKO_MERCHANT_BANK",
+        store_key="merchantBankName",
+        default="",
+    )
+    masked_suffix, suffix_src = resolve_credential(
+        store=store,
+        env_key="CHEKO_MASKED_SUFFIX",
+        store_key="maskedAccountSuffix",
+        default="",
+    )
+    bank_api_url, _ = resolve_credential(
+        store=store,
+        env_key="CHEKO_BANK_API_URL",
+        store_key="bankApiUrl",
+        default="http://127.0.0.1:8765/mock-bank/verify",
+    )
+
+    if not signing_key:
+        signing_key = "demo-signing-key-min-16-chars"
+
+    using_sdk_defaults = (
+        sig_src == "default"
+        or signature_alg.upper() == "HMAC-SHA256"
+        or bank_src == "default"
+        or bank_name.lower() == "kuda"
+        or suffix_src == "default"
+        or masked_suffix == "***9876"
+    )
+
+    return {
+        "terminal_id": terminal_id,
+        "signing_key": signing_key,
+        "signature_alg": signature_alg,
+        "bank_name": bank_name,
+        "masked_suffix": masked_suffix,
+        "bank_api_url": bank_api_url,
+        "config_path": str(config_path()),
+        "credential_source": f"alg={sig_src} bank={bank_src} suffix={suffix_src}",
+        "using_sdk_defaults": str(using_sdk_defaults).lower(),
+    }

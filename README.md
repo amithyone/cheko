@@ -9,7 +9,8 @@ Multi-terminal point of sale for supermarket, restaurant, services, hotel, and f
 ```bash
 npm install
 npm run dev      # http://localhost:3000
-npm run dev:desktop   # Electron + Vite (Windows POS shell)
+npm run dev:desktop   # Electron + Vite (Windows POS shell — use this for native testing)
+npm run start:desktop # Electron only (requires npm run build:desktop first)
 npm run build    # → dist/
 npm run build:desktop   # Windows installer (NSIS x64)
 npm run lint

@@ -9,11 +9,16 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist dist-electron release",
+    "clean": "node -e \"const fs=require('fs');['dist','dist-electron','release'].forEach(d=>fs.rmSync(d,{recursive:true,force:true}))\"",
     "lint": "tsc --noEmit",
     "build:electron": "tsc -p electron/tsconfig.json",
-    "dev:desktop": "npm run build:electron && concurrently -k \"vite --port=3000 --strictPort\" \"wait-on http://localhost:3000 && electron .\"",
-    "build:desktop": "ELECTRON=true vite build && npm run build:electron && electron-builder --win --x64 --config electron-builder.yml"
+    "dev:desktop": "npm run build:electron && cross-env VITE_HARDWARE_BRIDGE=electron concurrently -k -n vite,electron -c cyan,magenta \"vite --port=3000 --strictPort\" \"wait-on http://localhost:3000 && electron .\"",
+    "start:desktop": "npm run build:electron && cross-env VITE_HARDWARE_BRIDGE=electron electron .",
+    "build:desktop": "cross-env ELECTRON=true vite build && npm run build:electron && electron-builder --win --x64 --config electron-builder.yml",
+    "sidecar:broadcast": "powershell -ExecutionPolicy Bypass -File scripts/start-broadcast-sidecar.ps1",
+    "apply:payment-config": "powershell -ExecutionPolicy Bypass -File scripts/apply-cheko-payment-config.ps1",
+    "sidecar:install": "pip install -r broadcast-sidecar/requirements.txt",
+    "setup:broadcast-ble": "powershell -ExecutionPolicy Bypass -File scripts/setup-broadcast-ble.ps1"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -32,6 +37,7 @@
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
     "tailwindcss": "^4.1.14",

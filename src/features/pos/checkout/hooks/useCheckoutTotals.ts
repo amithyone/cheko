@@ -1,19 +1,8 @@
 import { CartItem } from "@/types";
+import { computeCartTotals, CART_TAX_RATE } from "@/shared/utils/cart-totals";
 
-const TAX_RATE = 0.085;
+export { CART_TAX_RATE };
 
 export function useCheckoutTotals(cart: CartItem[]) {
-  const subtotal = cart.reduce(
-    (acc, curr) => acc + curr.product.price * curr.quantity,
-    0
-  );
-  const tax = subtotal * TAX_RATE;
-  const total = subtotal + tax;
-
-  return {
-    subtotal,
-    tax,
-    total,
-    taxRate: TAX_RATE,
-  };
+  return computeCartTotals(cart);
 }

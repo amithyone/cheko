@@ -1,12 +1,13 @@
 import React from "react";
 import {
+  Clock,
   Trash2,
   Plus,
   Minus,
   FolderArchive,
   Scan,
 } from "lucide-react";
-import { Product, CartItem, ParkedCart } from "@/types";
+import { Product, CartItem, ParkedCart, ParkedPayment } from "@/types";
 import { CustomKeypad } from "./CustomKeypad";
 
 interface CartPanelProps {
@@ -14,6 +15,9 @@ interface CartPanelProps {
   currencySymbol: string;
   isScanning: boolean;
   parkedCarts: ParkedCart[];
+  parkedPayments?: ParkedPayment[];
+  onResumeParkedPayment?: (payment: ParkedPayment) => void;
+  onDismissParkedPayment?: (id: string) => void;
   subtotal: number;
   tax: number;
   total: number;
@@ -37,6 +41,9 @@ export function CartPanel({
   currencySymbol,
   isScanning,
   parkedCarts,
+  parkedPayments = [],
+  onResumeParkedPayment,
+  onDismissParkedPayment,
   subtotal,
   tax,
   total,
@@ -112,6 +119,51 @@ export function CartPanel({
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {parkedPayments.length > 0 && (
+            <div className="mt-3 p-3 bg-indigo-50/80 rounded-xl border border-indigo-100">
+              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-2 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Parked payments — awaiting webhook ({parkedPayments.length})
+              </p>
+              <div className="space-y-2 max-h-28 overflow-y-auto scrollbar">
+                {parkedPayments.map((pp) => (
+                  <div
+                    key={pp.id}
+                    className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-indigo-100 text-xs shadow-sm"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <p className="font-bold text-slate-700 truncate">{pp.label}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {pp.method} · {currencySymbol}
+                        {pp.totalDue.toFixed(2)} · {pp.timestamp}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {onResumeParkedPayment && (
+                        <button
+                          type="button"
+                          onClick={() => onResumeParkedPayment(pp)}
+                          className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-bold rounded hover:bg-indigo-700"
+                        >
+                          Open
+                        </button>
+                      )}
+                      {onDismissParkedPayment && (
+                        <button
+                          type="button"
+                          onClick={() => onDismissParkedPayment(pp.id)}
+                          className="p-1 text-slate-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
