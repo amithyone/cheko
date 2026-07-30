@@ -1,0 +1,56 @@
+import type { OrderHistoryRow } from "@/types";
+
+/** Completed / archived online orders for the history ledger */
+export const COMPLETED_ONLINE_ORDER_HISTORY: OrderHistoryRow[] = [
+  {
+    id: "ON-9388",
+    channel: "online",
+    summary: "AeroSwift Max Athletic Shoes x1 & others",
+    customer: "Chioma Adeyemi",
+    amount: 132950,
+    status: "delivered",
+    source: "ONLINE_DELIVERY",
+    timestamp: "Yesterday, 6:42 PM",
+    paymentMethod: "Bank transfer",
+    items: [
+      { productName: "AeroSwift Max Athletic Shoes", qty: 1, unitPrice: 121000 },
+      { productName: "Gatorade Energy Blue", qty: 3, unitPrice: 950 },
+    ],
+  },
+  {
+    id: "ON-9391",
+    channel: "online",
+    summary: "Tomalen Loaf Premium Bread x4",
+    customer: "Ibrahim Lawal",
+    amount: 4800,
+    status: "delivered",
+    source: "ONLINE_DELIVERY",
+    timestamp: "Yesterday, 2:15 PM",
+    paymentMethod: "Bank transfer",
+    items: [{ productName: "Tomalen Loaf Premium Bread", qty: 4, unitPrice: 1200 }],
+  },
+  {
+    id: "ON-9395",
+    channel: "online",
+    summary: "Truffle Fries (Double Cut) x2",
+    customer: "Ngozi Eze",
+    amount: 8400,
+    status: "delivered",
+    source: "ONLINE_DELIVERY",
+    timestamp: "Mar 28, 11:08 AM",
+    paymentMethod: "Bank transfer",
+    items: [{ productName: "Truffle Fries (Double Cut)", qty: 2, unitPrice: 4200 }],
+  },
+  {
+    id: "ON-9399",
+    channel: "online",
+    summary: "Graphic Tee - Limited Ed. x1",
+    customer: "David Alao",
+    amount: 6550,
+    status: "refunded",
+    source: "ONLINE_DELIVERY",
+    timestamp: "Mar 27, 4:30 PM",
+    paymentMethod: "Bank transfer",
+    items: [{ productName: "Graphic Tee - Limited Ed.", qty: 1, unitPrice: 6550 }],
+  },
+];

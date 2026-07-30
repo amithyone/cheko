@@ -1,0 +1,48 @@
+import type { StaffAccount } from "@/types";
+
+export const INITIAL_STAFF_ACCOUNTS: StaffAccount[] = [
+  {
+    id: "acct-1",
+    username: "alex_rivera",
+    password: "manager2024",
+    displayName: "Alex Rivera",
+    role: "Store Manager",
+    terminalType: "Manager Console",
+    terminalId: "term-mgr-01",
+    status: "active",
+    createdAt: "Jan 12, 2026",
+  },
+  {
+    id: "acct-2",
+    username: "sarah_cashier",
+    password: "lane04pos",
+    displayName: "Sarah Jenkins",
+    role: "Sales Rep",
+    terminalType: "POS Terminal",
+    terminalId: "term-4",
+    status: "active",
+    createdAt: "Feb 3, 2026",
+  },
+  {
+    id: "acct-3",
+    username: "logistics_dispatcher",
+    password: "dispatch99",
+    displayName: "Logistics Dispatcher",
+    role: "Online Sales Dispatcher",
+    terminalType: "Online Dispatch Station",
+    terminalId: "dispatch-01",
+    status: "active",
+    createdAt: "Feb 18, 2026",
+  },
+  {
+    id: "acct-4",
+    username: "cash_point_officer",
+    password: "cashpoint5",
+    displayName: "Cash Point Officer",
+    role: "Cash Point Officer",
+    terminalType: "Cash Point Terminal",
+    terminalId: "cash-point-04",
+    status: "active",
+    createdAt: "Mar 1, 2026",
+  },
+];

@@ -1,0 +1,48 @@
+import type { TerminalAudit } from "@/types";
+
+export const INITIAL_TERMINAL_AUDITS: TerminalAudit[] = [
+  {
+    id: "term-1",
+    name: "Terminal 01 - Main Lane",
+    operator: "Sarah Jenkins",
+    status: "ONLINE",
+    cashDrawer: 45000,
+    bankTransfer: 30000,
+    cardNfc: 109810,
+    totalSales: 184810,
+    reconciliationChecked: false,
+  },
+  {
+    id: "term-2",
+    name: "Terminal 02 - Self Checkout",
+    operator: "Autonomous Node 1",
+    status: "ONLINE",
+    cashDrawer: 0,
+    bankTransfer: 12390,
+    cardNfc: 236000,
+    totalSales: 248390,
+    reconciliationChecked: false,
+  },
+  {
+    id: "term-3",
+    name: "Terminal 03 - Kitchen Counter",
+    operator: "Chef Marcus",
+    status: "ONLINE",
+    cashDrawer: 12500,
+    bankTransfer: 18405,
+    cardNfc: 84000.5,
+    totalSales: 114905.5,
+    reconciliationChecked: false,
+  },
+  {
+    id: "term-4",
+    name: "Terminal 04 - Active Lane (You)",
+    operator: "Alex Rivera",
+    status: "ONLINE",
+    cashDrawer: 14200,
+    bankTransfer: 9500,
+    cardNfc: 18700,
+    totalSales: 42400,
+    reconciliationChecked: false,
+  },
+];
