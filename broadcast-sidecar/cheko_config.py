@@ -95,10 +95,7 @@ def build_broadcast_config() -> dict[str, str]:
     using_sdk_defaults = (
         sig_src == "default"
         or signature_alg.upper() == "HMAC-SHA256"
-        or bank_src == "default"
-        or bank_name.lower() == "kuda"
-        or suffix_src == "default"
-        or masked_suffix == "***9876"
+        or (not signing_key and terminal_id.upper().startswith("CP-"))
     )
 
     return {

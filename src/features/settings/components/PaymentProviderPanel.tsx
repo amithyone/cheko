@@ -251,8 +251,8 @@ export function PaymentProviderPanel({ onSaved }: PaymentProviderPanelProps) {
                 </select>
                 <p className="text-[10px] text-slate-500 leading-relaxed">
                   In CheckoutNow → Pay at Shop → <strong>Regenerate signing key</strong> (Ed25519, shown once).
-                  Settlement bank: <strong>RUBIES MFB</strong>, suffix <strong>***4863</strong> for terminal CP-1RK8Z.
-                  Do not use SDK defaults (kuda / ***9876 / HMAC-SHA256).
+                  Settlement bank and masked suffix are optional in POS — CheckoutPay returns the real account after verify.
+                  Do not use HMAC-SHA256; use ed25519 + dashboard signing key only.
                 </p>
               </div>
             )}

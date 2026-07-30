@@ -114,8 +114,8 @@ def _broadcast_ble(
         terminal_id=cfg["terminal_id"],
         signing_key=cfg["signing_key"],
         signature_alg=cfg["signature_alg"],
-        bank_name=cfg["bank_name"],
-        masked_suffix=cfg["masked_suffix"],
+        bank_name=cfg["bank_name"] or "CheckoutPay",
+        masked_suffix=cfg["masked_suffix"] or "***0000",
         amount_ngn=packet_amount,
         item_count=item_count,
         session_uuid_v4=session.session_uuid,
@@ -212,8 +212,8 @@ def broadcast():
             {
                 "ok": False,
                 "error": (
-                    "Pay at Shop credentials incomplete — open Settings → Payment Provider → "
-                    "CheckoutNow: ed25519 signing key, RUBIES MFB, ***4863 (not SDK kuda/HMAC defaults)"
+                    "Pay at Shop credentials incomplete — Settings → Payment Provider → "
+                    "CheckoutNow: terminal ID + Ed25519 signing key (bank/account come from server)"
                 ),
                 "credential_source": cfg.get("credential_source"),
                 "using_sdk_defaults": True,
@@ -231,13 +231,6 @@ def broadcast():
             {
                 "ok": False,
                 "error": "Demo signing key cannot be used for CheckoutPay terminals — paste Ed25519 key from dashboard",
-            }
-        ), 400
-    if not cfg.get("bank_name") or not cfg.get("masked_suffix"):
-        return jsonify(
-            {
-                "ok": False,
-                "error": "Missing merchant bank or masked suffix — Settings → CheckoutNow → Settlement bank + Masked suffix",
             }
         ), 400
     if cfg["signature_alg"].strip().upper() == "HMAC-SHA256":
