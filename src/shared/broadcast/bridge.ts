@@ -27,9 +27,7 @@ async function httpHealth(): Promise<BroadcastHealth | null> {
       session_status?: SessionStatus | null;
       ble_live?: boolean;
       signature_alg?: string;
-      bank_name?: string;
-      bank_name_hash?: string;
-      masked_account_suffix?: string;
+      connectivity?: string;
       using_sdk_defaults?: boolean;
       credential_source?: string;
     };
@@ -43,9 +41,7 @@ async function httpHealth(): Promise<BroadcastHealth | null> {
       terminalLabel: data.terminal_label,
       sessionStatus: data.session_status ?? null,
       signatureAlg: data.signature_alg,
-      bankName: data.bank_name,
-      bankNameHash: data.bank_name_hash,
-      maskedAccountSuffix: data.masked_account_suffix,
+      connectivity: data.connectivity,
       usingSdkDefaults: data.using_sdk_defaults,
       credentialSource: data.credential_source,
     };

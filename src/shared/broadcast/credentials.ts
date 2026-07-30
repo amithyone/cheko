@@ -8,8 +8,10 @@ export interface BroadcastCredentialCheck {
 const DEMO_SIGNING_KEY = "demo-signing-key-min-16-chars";
 
 /**
- * CheckoutPay Pay at Shop — POS only needs terminal ID + Ed25519 signing key.
- * Bank name and account come from the server after verify (not from BLE).
+ * Online Pay at Shop: POS broadcasts terminal_id + amount only.
+ * CheckoutNow loads settlement account from CheckoutPay using terminal_id.
+ *
+ * Offline: POS also stores settlement account locally and includes it in BLE.
  */
 export function validateCheckoutNowBroadcastCredentials(
   creds: PaymentProviderCredentials | null | undefined
@@ -27,7 +29,17 @@ export function validateCheckoutNowBroadcastCredentials(
 
   const alg = (creds?.signatureAlg ?? "ed25519").toUpperCase();
   if (alg === "HMAC-SHA256") {
-    errors.push("Signature algorithm must be ed25519 for CheckoutPay terminals (not HMAC-SHA256).");
+    errors.push("Signature algorithm must be ed25519 (not HMAC-SHA256).");
+  }
+
+  const connectivity = creds?.broadcastConnectivity ?? "online";
+  if (connectivity === "offline") {
+    if (!creds?.settlementAccountNumber?.trim()) {
+      errors.push("Offline mode: save your settlement account number on this POS.");
+    }
+    if (!creds?.settlementBankCode?.trim()) {
+      errors.push("Offline mode: save NIP bank code (e.g. 090175 for Rubies).");
+    }
   }
 
   return { ok: errors.length === 0, errors };

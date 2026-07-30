@@ -74,8 +74,14 @@ export function PaymentProviderPanel({ onSaved }: PaymentProviderPanelProps) {
       merchantId: form.merchantId,
       contractCode: form.contractCode,
       signingKey: form.signingKey,
+      broadcastConnectivity:
+        provider === "checkoutnow"
+          ? (form.broadcastConnectivity ?? "online")
+          : form.broadcastConnectivity,
+      settlementAccountNumber: form.settlementAccountNumber,
+      settlementBankCode: form.settlementBankCode,
+      settlementAccountName: form.settlementAccountName,
       merchantBankName: form.merchantBankName,
-      maskedAccountSuffix: form.maskedAccountSuffix,
       signatureAlg:
         provider === "checkoutnow"
           ? (form.signatureAlg ?? "ed25519")
@@ -232,28 +238,99 @@ export function PaymentProviderPanel({ onSaved }: PaymentProviderPanelProps) {
               </div>
             ))}
             {provider === "checkoutnow" && (
-              <div className="sm:col-span-2 space-y-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  Signature algorithm (Pay at Shop)
-                </label>
-                <select
-                  value={form.signatureAlg ?? "ed25519"}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      signatureAlg: e.target.value as SignatureAlg,
-                    }))
-                  }
-                  className="w-full max-w-md rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-                >
-                  <option value="ed25519">ed25519 — CheckoutNow Pay at Shop (recommended)</option>
-                  <option value="HMAC-SHA256">HMAC-SHA256 — open protocol / local dev only</option>
-                </select>
-                <p className="text-[10px] text-slate-500 leading-relaxed">
-                  In CheckoutNow → Pay at Shop → <strong>Regenerate signing key</strong> (Ed25519, shown once).
-                  Settlement bank and masked suffix are optional in POS — CheckoutPay returns the real account after verify.
-                  Do not use HMAC-SHA256; use ed25519 + dashboard signing key only.
-                </p>
+              <div className="sm:col-span-2 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                    Pay at Shop mode
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["online", "Online (recommended)"],
+                        ["offline", "Offline"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({ ...f, broadcastConnectivity: value }))
+                        }
+                        className={`px-3 py-2 rounded-xl text-xs font-bold border-2 cursor-pointer ${
+                          (form.broadcastConnectivity ?? "online") === value
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-slate-200 text-slate-600"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                    <strong>Online:</strong> BLE sends terminal ID + amount only. CheckoutNow loads your
+                    settlement account from CheckoutPay.
+                    <br />
+                    <strong>Offline:</strong> BLE also includes account saved below (no live API).
+                  </p>
+                </div>
+                {(form.broadcastConnectivity ?? "online") === "offline" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                    <Input
+                      label="Settlement account (10 digits)"
+                      value={form.settlementAccountNumber ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, settlementAccountNumber: e.target.value }))
+                      }
+                      placeholder="1000004863"
+                    />
+                    <Input
+                      label="NIP bank code"
+                      value={form.settlementBankCode ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, settlementBankCode: e.target.value }))
+                      }
+                      placeholder="090175"
+                    />
+                    <Input
+                      label="Bank name"
+                      value={form.merchantBankName ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, merchantBankName: e.target.value }))
+                      }
+                      placeholder="RUBIES MFB"
+                    />
+                    <Input
+                      label="Account name"
+                      value={form.settlementAccountName ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, settlementAccountName: e.target.value }))
+                      }
+                      placeholder="MIDAS AGRO"
+                    />
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+                    Signature algorithm
+                  </label>
+                  <select
+                    value={form.signatureAlg ?? "ed25519"}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        signatureAlg: e.target.value as SignatureAlg,
+                      }))
+                    }
+                    className="w-full max-w-md rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+                  >
+                    <option value="ed25519">ed25519 — CheckoutPay Pay at Shop</option>
+                    <option value="HMAC-SHA256">HMAC-SHA256 — legacy dev only</option>
+                  </select>
+                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                    POS needs: <strong>Terminal ID</strong> + <strong>Ed25519 signing key</strong> from Pay at
+                    shop dashboard. No bank name hash or account in BLE for online mode.
+                  </p>
+                </div>
               </div>
             )}
             <label className="flex items-center gap-2 text-sm font-medium text-slate-600 self-end pb-2">

@@ -114,11 +114,18 @@ def _broadcast_ble(
         terminal_id=cfg["terminal_id"],
         signing_key=cfg["signing_key"],
         signature_alg=cfg["signature_alg"],
-        bank_name=cfg["bank_name"] or "CheckoutPay",
-        masked_suffix=cfg["masked_suffix"] or "***0000",
         amount_ngn=packet_amount,
         item_count=item_count,
         session_uuid_v4=session.session_uuid,
+        connectivity=cfg.get("connectivity", "online"),
+        settlement={
+            "recipient_account": cfg.get("settlement_account", ""),
+            "recipient_bank_code": cfg.get("settlement_bank_code", ""),
+            "bank_name": cfg.get("settlement_bank_name", ""),
+            "recipient_account_name": cfg.get("settlement_account_name", ""),
+        }
+        if cfg.get("connectivity") == "offline"
+        else None,
     )
     ble_peripheral.publish_envelope(envelope)
 
@@ -127,18 +134,14 @@ def _broadcast_ble(
     _active_session = session_id
     _ble_ready = True
     log.info(
-        "BLE LIVE broadcast mode=%s session=%s terminal_label=%s %s packet_total_amount_ngn=%s ts=%s signature_alg=%s bank=%s",
+        "BLE LIVE broadcast checkout_mode=%s connectivity=%s session=%s terminal=%s amount_ngn=%s ts=%s signature_alg=%s",
         mode,
+        cfg.get("connectivity", "online"),
         session_id[:8],
-        session_store.terminal_picker_label(cfg["terminal_id"]),
-        amount_encoding.packet_amount_label(
-            1 if mode == "public" else amount_checkout,
-            cfg["signature_alg"],
-        ),
+        cfg["terminal_id"],
         envelope["payload"]["transaction_details"]["total_amount_ngn"],
         envelope["payload"]["timestamp_ms"],
         envelope.get("signature_alg", cfg["signature_alg"]),
-        cfg["bank_name"],
     )
     return {
         "ok": True,
@@ -153,8 +156,6 @@ def _broadcast_ble(
 @app.get("/health")
 def health():
     cfg = _config()
-    from checkout_broadcast.signing import hash_bank_name
-
     sdk = _init_addon() is not None or _bless_available()
     transport = "ble" if _transport_mode == "ble" and _bless_available() else (
         "simulated" if sdk else "unavailable"
@@ -183,10 +184,9 @@ def health():
             "terminal_id": cfg["terminal_id"],
             "terminal_label": session_store.terminal_picker_label(cfg["terminal_id"]),
             "signature_alg": cfg["signature_alg"],
-            "bank_name": cfg["bank_name"],
-            "bank_name_hash": hash_bank_name(cfg["bank_name"]),
-            "masked_account_suffix": cfg["masked_suffix"],
+            "connectivity": cfg.get("connectivity", "online"),
             "using_sdk_defaults": cfg.get("using_sdk_defaults") == "true",
+            "offline_incomplete": cfg.get("offline_incomplete") == "true",
             "credential_source": cfg.get("credential_source"),
             "config_path": cfg.get("config_path"),
         }
@@ -207,6 +207,13 @@ def broadcast():
     elif amount_raw <= 0:
         return jsonify({"ok": False, "error": "amount_ngn must be positive for checkout mode"}), 400
 
+    if cfg.get("offline_incomplete") == "true":
+        return jsonify(
+            {
+                "ok": False,
+                "error": "Offline mode: save settlement account + bank code in Settings → CheckoutNow",
+            }
+        ), 400
     if cfg.get("using_sdk_defaults") == "true":
         return jsonify(
             {

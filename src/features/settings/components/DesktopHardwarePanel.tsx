@@ -298,8 +298,7 @@ function BroadcastTestSection({
           {localHealth.signatureAlg && (
             <p>
               Sign: {localHealth.signatureAlg}
-              {localHealth.bankName && ` · Bank: ${localHealth.bankName}`}
-              {localHealth.maskedAccountSuffix && ` · Suffix: ${localHealth.maskedAccountSuffix}`}
+              {localHealth.connectivity && ` · Mode: ${localHealth.connectivity}`}
             </p>
           )}
           {localHealth.usingSdkDefaults && (

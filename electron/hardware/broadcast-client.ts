@@ -70,13 +70,21 @@ function sidecarEnv(): NodeJS.ProcessEnv {
       creds?.signatureAlg ??
       process.env.CHEKO_SIGNATURE_ALG ??
       "ed25519",
+    CHEKO_BROADCAST_CONNECTIVITY:
+      creds?.broadcastConnectivity ??
+      process.env.CHEKO_BROADCAST_CONNECTIVITY ??
+      "online",
+    CHEKO_SETTLEMENT_ACCOUNT:
+      creds?.settlementAccountNumber ?? process.env.CHEKO_SETTLEMENT_ACCOUNT ?? "",
+    CHEKO_SETTLEMENT_BANK_CODE:
+      creds?.settlementBankCode ?? process.env.CHEKO_SETTLEMENT_BANK_CODE ?? "",
+    CHEKO_SETTLEMENT_ACCOUNT_NAME:
+      creds?.settlementAccountName ?? process.env.CHEKO_SETTLEMENT_ACCOUNT_NAME ?? "",
     CHEKO_BANK_API_URL:
       process.env.CHEKO_BANK_API_URL ?? `${EXTERNAL_URL}`,
     CHEKO_BROADCAST_TRANSPORT: process.env.CHEKO_BROADCAST_TRANSPORT ?? "ble",
     CHEKO_MERCHANT_BANK:
       creds?.merchantBankName ?? process.env.CHEKO_MERCHANT_BANK ?? "",
-    CHEKO_MASKED_SUFFIX:
-      creds?.maskedAccountSuffix ?? process.env.CHEKO_MASKED_SUFFIX ?? "",
   };
 }
 
@@ -92,9 +100,7 @@ async function fetchExternalHealth(): Promise<BroadcastHealth | null> {
       terminal_id: string;
       ble_live?: boolean;
       signature_alg?: string;
-      bank_name?: string;
-      bank_name_hash?: string;
-      masked_account_suffix?: string;
+      connectivity?: string;
       using_sdk_defaults?: boolean;
       credential_source?: string;
     };

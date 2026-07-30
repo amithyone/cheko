@@ -34,6 +34,8 @@ export type PaymentProviderId =
 
 export type SignatureAlg = "HMAC-SHA256" | "ed25519";
 
+export type BroadcastConnectivity = "online" | "offline";
+
 export interface PaymentProviderCredentials {
   provider: PaymentProviderId;
   apiKey?: string;
@@ -44,10 +46,11 @@ export interface PaymentProviderCredentials {
   contractCode?: string;
   signingKey?: string;
   signatureAlg?: SignatureAlg;
-  /** Settlement bank slug for SDK bank_name_hash (e.g. kuda, opay) */
+  broadcastConnectivity?: BroadcastConnectivity;
+  settlementAccountNumber?: string;
+  settlementBankCode?: string;
+  settlementAccountName?: string;
   merchantBankName?: string;
-  /** Public BLE mask e.g. ***9876 — must match terminal registry */
-  maskedAccountSuffix?: string;
   webhookSecret?: string;
   testMode?: boolean;
 }

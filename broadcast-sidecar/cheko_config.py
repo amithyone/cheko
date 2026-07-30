@@ -30,10 +30,6 @@ def resolve_credential(
     store_key: str,
     default: str = "",
 ) -> tuple[str, str]:
-    """
-    Pick credential value and its source label.
-    Cheko Settings file wins over env (unless CHEKO_FORCE_ENV=1).
-    """
     force_env = os.environ.get("CHEKO_FORCE_ENV") == "1"
     env_val = os.environ.get(env_key, "").strip()
     store_val = store.get(store_key)
@@ -56,7 +52,7 @@ def build_broadcast_config() -> dict[str, str]:
         store_key="terminalId",
         default="POS-LAG-001",
     )
-    signing_key, _ = resolve_credential(
+    signing_key, key_src = resolve_credential(
         store=store,
         env_key="CHEKO_SIGNING_KEY",
         store_key="signingKey",
@@ -68,16 +64,37 @@ def build_broadcast_config() -> dict[str, str]:
         store_key="signatureAlg",
         default="ed25519",
     )
-    bank_name, bank_src = resolve_credential(
+    connectivity, conn_src = resolve_credential(
+        store=store,
+        env_key="CHEKO_BROADCAST_CONNECTIVITY",
+        store_key="broadcastConnectivity",
+        default="online",
+    )
+    if connectivity not in ("online", "offline"):
+        connectivity = "online"
+
+    settlement_account, acct_src = resolve_credential(
+        store=store,
+        env_key="CHEKO_SETTLEMENT_ACCOUNT",
+        store_key="settlementAccountNumber",
+        default="",
+    )
+    settlement_bank_code, code_src = resolve_credential(
+        store=store,
+        env_key="CHEKO_SETTLEMENT_BANK_CODE",
+        store_key="settlementBankCode",
+        default="",
+    )
+    settlement_bank_name, bank_src = resolve_credential(
         store=store,
         env_key="CHEKO_MERCHANT_BANK",
         store_key="merchantBankName",
         default="",
     )
-    masked_suffix, suffix_src = resolve_credential(
+    settlement_account_name, name_src = resolve_credential(
         store=store,
-        env_key="CHEKO_MASKED_SUFFIX",
-        store_key="maskedAccountSuffix",
+        env_key="CHEKO_SETTLEMENT_ACCOUNT_NAME",
+        store_key="settlementAccountName",
         default="",
     )
     bank_api_url, _ = resolve_credential(
@@ -87,10 +104,8 @@ def build_broadcast_config() -> dict[str, str]:
         default="http://127.0.0.1:8765/mock-bank/verify",
     )
 
-    if not signing_key:
-        # CheckoutPay terminals must use dashboard Ed25519 key — never SDK demo HMAC.
-        if not terminal_id.upper().startswith("CP-"):
-            signing_key = "demo-signing-key-min-16-chars"
+    if not signing_key and not terminal_id.upper().startswith("CP-"):
+        signing_key = "demo-signing-key-min-16-chars"
 
     using_sdk_defaults = (
         sig_src == "default"
@@ -98,14 +113,22 @@ def build_broadcast_config() -> dict[str, str]:
         or (not signing_key and terminal_id.upper().startswith("CP-"))
     )
 
+    offline_incomplete = connectivity == "offline" and (
+        not settlement_account or not settlement_bank_code
+    )
+
     return {
         "terminal_id": terminal_id,
         "signing_key": signing_key,
         "signature_alg": signature_alg,
-        "bank_name": bank_name,
-        "masked_suffix": masked_suffix,
+        "connectivity": connectivity,
+        "settlement_account": settlement_account,
+        "settlement_bank_code": settlement_bank_code,
+        "settlement_bank_name": settlement_bank_name,
+        "settlement_account_name": settlement_account_name,
         "bank_api_url": bank_api_url,
         "config_path": str(config_path()),
-        "credential_source": f"alg={sig_src} bank={bank_src} suffix={suffix_src}",
+        "credential_source": f"alg={sig_src} connectivity={conn_src}",
         "using_sdk_defaults": str(using_sdk_defaults).lower(),
+        "offline_incomplete": str(offline_incomplete).lower(),
     }

@@ -14,6 +14,9 @@ export interface PaymentProviderCapabilities {
 
 export type SignatureAlg = "HMAC-SHA256" | "ed25519";
 
+/** Online: CheckoutNow fetches account from CheckoutPay. Offline: account saved on POS goes in BLE. */
+export type BroadcastConnectivity = "online" | "offline";
+
 export interface PaymentProviderCredentials {
   provider: PaymentProviderId;
   apiKey?: string;
@@ -23,12 +26,14 @@ export interface PaymentProviderCredentials {
   merchantId?: string;
   contractCode?: string;
   signingKey?: string;
-  /** CheckoutNow Pay at Shop — default ed25519 (check-outpay.com verify) */
   signatureAlg?: SignatureAlg;
-  /** Settlement bank slug for SDK bank_name_hash (e.g. kuda, opay) */
+  /** Online (default) or offline Pay at Shop */
+  broadcastConnectivity?: BroadcastConnectivity;
+  /** Offline mode only — settlement account stored on this POS */
+  settlementAccountNumber?: string;
+  settlementBankCode?: string;
+  settlementAccountName?: string;
   merchantBankName?: string;
-  /** Public BLE mask e.g. ***9876 — must match terminal registry */
-  maskedAccountSuffix?: string;
   webhookSecret?: string;
   testMode?: boolean;
 }
@@ -71,12 +76,10 @@ export const PAYMENT_PROVIDERS: ProviderMeta[] = [
     description: "Full stack — card, virtual account, transfer verify, BLE broadcast",
     fullStack: true,
     fields: [
-      { key: "apiKey", label: "API key", secret: true },
-      { key: "terminalId", label: "Terminal ID" },
-      { key: "merchantId", label: "Merchant ID" },
-      { key: "merchantBankName", label: "Settlement bank (broadcast hash)", placeholder: "RUBIES MFB" },
-      { key: "maskedAccountSuffix", label: "Masked account suffix", placeholder: "***4863" },
-      { key: "signingKey", label: "Signing key (broadcast)", secret: true },
+      { key: "apiKey", label: "API key (session polling)", secret: true },
+      { key: "terminalId", label: "Terminal ID", placeholder: "CP-1RK8Z" },
+      { key: "merchantId", label: "Merchant ID (optional)" },
+      { key: "signingKey", label: "Ed25519 signing key", secret: true },
     ],
   },
   {

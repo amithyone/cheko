@@ -8,6 +8,7 @@ export interface BroadcastHealth {
   terminalLabel?: string;
   sessionStatus?: "open" | "paid" | "cancelled" | null;
   signatureAlg?: string;
+  connectivity?: string;
   bankName?: string;
   bankNameHash?: string;
   maskedAccountSuffix?: string;
