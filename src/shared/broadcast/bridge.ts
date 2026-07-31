@@ -5,6 +5,7 @@ import type {
   BroadcastStartResult,
   SessionStatus,
 } from "./types";
+import { expectBroadcastPayment } from "./checkout-api";
 
 const sidecarUrl = (): string =>
   import.meta.env.VITE_BROADCAST_BRIDGE_URL ?? "http://127.0.0.1:8765";
@@ -151,6 +152,15 @@ export const broadcastBridge = {
     } catch {
       return { ok: false };
     }
+  },
+
+  async expectPayment(
+    sessionId: string,
+    terminalId: string,
+    apiKey: string
+  ): Promise<{ ok: boolean }> {
+    const ok = await expectBroadcastPayment(sessionId, terminalId, apiKey);
+    return { ok };
   },
 
   /** Release active BLE slot; parked session stays open for Pay at Shop verify. */

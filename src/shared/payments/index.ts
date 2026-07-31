@@ -6,6 +6,8 @@ import type {
 } from "@/types/payment-provider";
 import type { ChargeCardRequest, ChargeCardResponse } from "@/features/pos/terminal/api";
 import { validateCheckoutNowBroadcastCredentials } from "@/shared/broadcast/credentials";
+import { expectBroadcastPayment, pollBroadcastSession } from "@/shared/broadcast/checkout-api";
+import { roundMoney } from "@/shared/utils/money";
 
 export interface PaymentAdapter {
   id: PaymentProviderId;
@@ -13,7 +15,11 @@ export interface PaymentAdapter {
   verifyCredentials(): Promise<{ ok: boolean; message?: string }>;
   createVirtualAccount(amount: number, ref: string, customerName?: string): Promise<VirtualAccount>;
   chargeCard(req: ChargeCardRequest): Promise<ChargeCardResponse>;
-  verifyTransfer(ref: string, amount: number): Promise<{ credited: boolean; sessionId?: string }>;
+  verifyTransfer(
+    ref: string,
+    amount: number,
+    opts?: { broadcastSessionId?: string | null }
+  ): Promise<{ credited: boolean; sessionId?: string; partial?: boolean }>;
 }
 
 export type AdapterFactory = (creds: PaymentProviderCredentials | null) => PaymentAdapter;
@@ -64,9 +70,10 @@ function baseAdapter(
         brand: "Verve",
       };
     },
-    async verifyTransfer(ref, amount) {
+    async verifyTransfer(ref, amount, opts) {
       await delay(700);
       void amount;
+      void opts;
       return { credited: true, sessionId: ref };
     },
   };
@@ -80,12 +87,12 @@ function limitedAdapter(
   const base = baseAdapter(id, capabilities, creds);
   return {
     ...base,
-    async verifyTransfer(ref, amount) {
+    async verifyTransfer(ref, amount, opts) {
       if (!capabilities.transferVerify) {
         await delay(500);
         return { credited: true, sessionId: ref };
       }
-      return base.verifyTransfer(ref, amount);
+      return base.verifyTransfer(ref, amount, opts);
     },
   };
 }
@@ -105,6 +112,34 @@ export function createCheckoutNowAdapter(creds: PaymentProviderCredentials | nul
         return { ok: false, message: broadcast.errors.join(" ") };
       }
       return { ok: true, message: "Pay at Shop credentials look valid (ed25519 + settlement bank)" };
+    },
+    async verifyTransfer(_ref, amount, opts) {
+      const sessionId = opts?.broadcastSessionId?.trim();
+      const terminalId = creds?.terminalId?.trim();
+      const apiKey = creds?.apiKey?.trim();
+      if (!sessionId || !terminalId || !apiKey) {
+        return { credited: false };
+      }
+
+      const poll = await pollBroadcastSession(sessionId, terminalId, apiKey);
+      if (!poll) {
+        return { credited: false, sessionId };
+      }
+
+      if (poll.sessionStatus === "paid") {
+        return { credited: true, sessionId };
+      }
+
+      if (poll.sessionStatus === "partial") {
+        return { credited: false, sessionId, partial: true };
+      }
+
+      const expectedKobo = Math.round(roundMoney(amount) * 100);
+      if (poll.amountNgn > 0 && expectedKobo > 0 && poll.amountNgn !== expectedKobo) {
+        return { credited: false, sessionId };
+      }
+
+      return { credited: false, sessionId };
     },
   };
 }

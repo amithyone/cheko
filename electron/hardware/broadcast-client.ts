@@ -113,9 +113,7 @@ async function fetchExternalHealth(): Promise<BroadcastHealth | null> {
       activeSession: data.active_session,
       terminalId: data.terminal_id,
       signatureAlg: data.signature_alg,
-      bankName: data.bank_name,
-      bankNameHash: data.bank_name_hash,
-      maskedAccountSuffix: data.masked_account_suffix,
+      connectivity: data.connectivity,
       usingSdkDefaults: data.using_sdk_defaults,
       credentialSource: data.credential_source,
     };

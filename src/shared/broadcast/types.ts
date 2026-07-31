@@ -6,7 +6,7 @@ export interface BroadcastHealth {
   activeSession: string | null;
   terminalId: string;
   terminalLabel?: string;
-  sessionStatus?: "open" | "paid" | "cancelled" | null;
+  sessionStatus?: SessionStatus | null;
   signatureAlg?: string;
   connectivity?: string;
   bankName?: string;
@@ -16,7 +16,7 @@ export interface BroadcastHealth {
   credentialSource?: string;
 }
 
-export type SessionStatus = "open" | "paid" | "cancelled";
+export type SessionStatus = "open" | "paid" | "cancelled" | "partial" | "awaiting_payment" | "awaiting_scan";
 
 export type BroadcastMode = "public" | "checkout";
 

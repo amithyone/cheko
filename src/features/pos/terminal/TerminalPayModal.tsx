@@ -26,6 +26,7 @@ import {
 } from "@/context/PaymentProviderContext";
 import { useBroadcastPay } from "@/hooks/useBroadcastPay";
 import { BROADCAST_MODE_LABELS, loadBroadcastSettings } from "@/shared/broadcast/settings";
+import { broadcastBridge } from "@/shared/broadcast/bridge";
 import { formatTerminalPickerLabel } from "@/shared/broadcast/terminalLabel";
 import { hardwareBridge } from "@/shared/hardware/bridge";
 import { buildReceiptPayload, printReceipt } from "./api";
@@ -65,7 +66,7 @@ export default function TerminalPayModal({
   currencySymbol = "₦",
 }: TerminalPayModalProps) {
   const notice = useNotice();
-  const { adapter, capabilities, summary } = usePaymentProvider();
+  const { adapter, capabilities, summary, credentials } = usePaymentProvider();
   const [phase, setPhase] = useState<PaymentPhase>(() => resumePayment?.phase ?? "select_method");
   const [selectedMethod, setSelectedMethod] = useState<PayMethod | null>(
     () => resumePayment?.method ?? null
@@ -285,10 +286,21 @@ export default function TerminalPayModal({
   const handleTransferApiConfirmed = async () => {
     setProcessing(true);
     try {
-      const res = await adapter.verifyTransfer(transferRef, totalDue);
+      if (broadcastSessionId && credentials?.apiKey && credentials?.terminalId) {
+        await broadcastBridge.expectPayment(
+          broadcastSessionId,
+          credentials.terminalId,
+          credentials.apiKey
+        );
+      }
+      const res = await adapter.verifyTransfer(transferRef, totalDue, {
+        broadcastSessionId: broadcastSessionId ?? undefined,
+      });
       if (res.credited) {
         simulateApiNotification("Bank transfer");
         setTimeout(() => void finishSuccess(), 800);
+      } else if (res.partial) {
+        notice.showToast("Partial payment received — waiting for balance", "info");
       }
     } finally {
       setProcessing(false);
@@ -357,6 +369,14 @@ export default function TerminalPayModal({
     if (!canPark) return;
 
     const label = parkPaymentLabel.trim() || `Payment ${formatMoney(totalDue)}`;
+    const parkedSessionId = broadcastSessionId ?? resumePayment?.broadcastSessionId ?? null;
+    if (parkedSessionId && credentials?.apiKey && credentials?.terminalId) {
+      await broadcastBridge.expectPayment(
+        parkedSessionId,
+        credentials.terminalId,
+        credentials.apiKey
+      );
+    }
     await handOffBroadcast();
     onParkPayment({
       label,
