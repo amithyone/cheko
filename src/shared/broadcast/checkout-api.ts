@@ -51,6 +51,30 @@ export async function pollBroadcastSession(
   };
 }
 
+/** Push the POS Ed25519 seed to CheckoutPay so live verify accepts this machine's signatures. */
+export async function syncBroadcastSigningKey(
+  terminalId: string,
+  signingKey: string,
+  apiKey: string
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${checkoutBroadcastApiBase()}/terminals/sync-signing-key`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Terminal-Api-Key": apiKey,
+    },
+    body: JSON.stringify({ terminal_id: terminalId, signing_key: signingKey }),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  const data = (await res.json()) as { ok?: boolean; error?: string };
+  if (!res.ok || !data.ok) {
+    return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+  }
+
+  return { ok: true };
+}
+
 export async function expectBroadcastPayment(
   sessionUuid: string,
   terminalId: string,
