@@ -25,7 +25,7 @@ def canonical_payload_bytes(payload: dict[str, Any]) -> bytes:
 
 
 def _decode_signing_key_material(signing_key: str) -> bytes:
-    raw = signing_key.strip()
+    raw = "".join(signing_key.strip().split())
     try:
         padded = raw + "=" * (-len(raw) % 4)
         return base64.b64decode(padded)
