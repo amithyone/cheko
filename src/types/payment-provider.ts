@@ -36,6 +36,8 @@ export interface PaymentProviderCredentials {
   merchantBankName?: string;
   /** CheckoutPay broadcast API base, e.g. https://check-outpay.com/api/v1/broadcast */
   checkoutBroadcastApi?: string;
+  /** Masked suffix in BLE wire (e.g. ***4863) — optional; server returns real account after verify */
+  maskedAccountSuffix?: string;
   webhookSecret?: string;
   testMode?: boolean;
 }

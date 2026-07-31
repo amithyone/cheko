@@ -115,6 +115,12 @@ def build_broadcast_config() -> dict[str, str]:
         store_key="checkoutBroadcastApi",
         default="https://check-outpay.com/api/v1/broadcast",
     )
+    masked_suffix, _ = resolve_credential(
+        store=store,
+        env_key="CHEKO_MASKED_SUFFIX",
+        store_key="maskedAccountSuffix",
+        default="***0000",
+    )
 
     if not signing_key and not terminal_id.upper().startswith("CP-"):
         signing_key = "demo-signing-key-min-16-chars"
@@ -141,6 +147,7 @@ def build_broadcast_config() -> dict[str, str]:
         "bank_api_url": bank_api_url,
         "api_key": api_key,
         "checkout_broadcast_api": checkout_broadcast_api,
+        "masked_suffix": masked_suffix,
         "config_path": str(config_path()),
         "credential_source": f"alg={sig_src} connectivity={conn_src}",
         "using_sdk_defaults": str(using_sdk_defaults).lower(),

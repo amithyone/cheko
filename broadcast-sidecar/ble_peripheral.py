@@ -609,10 +609,10 @@ def shutdown() -> None:
     _thread = None
 
 def publish_envelope(envelope: dict) -> None:
-    """Push signed JSON envelope to BLE read characteristic."""
+    """Push signed JSON (full envelope or compact wire) to BLE read characteristic."""
     packet_bytes = json.dumps(envelope, separators=(",", ":")).encode("utf-8")
-    if b'"timestamp_ms"' not in packet_bytes:
-        raise RuntimeError("Signed BLE packet missing timestamp_ms in payload")
+    if b'"timestamp_ms"' not in packet_bytes and b'"ts"' not in packet_bytes:
+        raise RuntimeError("Signed BLE packet missing timestamp in payload")
     if not is_advertising():
         try:
             start()

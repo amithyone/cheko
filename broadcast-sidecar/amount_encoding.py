@@ -10,17 +10,19 @@ def normalize_checkout_amount(amount: float | int) -> float:
     return round(float(amount), 2)
 
 
-def to_packet_amount(amount: float | int, signature_alg: str) -> int:
+def to_packet_amount(amount: float | int, signature_alg: str, *, allow_zero: bool = False) -> int:
     """
     CheckoutNow / ed25519: integer kobo (9003.76 → 900376).
     Open HMAC dev protocol: integer whole naira (2500.00 → 2500).
     """
     normalized = normalize_checkout_amount(amount)
+    if allow_zero and normalized == 0:
+        return 0
     if packet_signing.normalize_signature_alg(signature_alg) == "ed25519":
         kobo = int(round(normalized * 100))
-        return max(1, kobo)
+        return max(0 if allow_zero else 1, kobo)
     whole = int(round(normalized))
-    return max(1, whole)
+    return max(0 if allow_zero else 1, whole)
 
 
 def packet_amount_label(amount: float | int, signature_alg: str) -> str:

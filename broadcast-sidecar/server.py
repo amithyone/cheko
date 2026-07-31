@@ -91,12 +91,14 @@ def _broadcast_ble(
 ) -> dict[str, Any]:
     global _active_session, _ble_ready
     import ble_peripheral
-    import ble_broadcast
+    import ble_wire_compact
 
     cfg = _config()
+    is_presence = mode == "public"
     packet_amount = amount_encoding.to_packet_amount(
-        1 if mode == "public" else amount_checkout,
+        0 if is_presence else amount_checkout,
         cfg["signature_alg"],
+        allow_zero=is_presence,
     )
 
     session = None
@@ -108,40 +110,36 @@ def _broadcast_ble(
             terminal_id=cfg["terminal_id"],
             mode=mode,
             amount_ngn=packet_amount,
-            item_count=item_count,
+            item_count=max(item_count, 1) if not is_presence else 0,
         )
-    envelope = ble_broadcast.build_signed_packet(
-        terminal_id=cfg["terminal_id"],
-        signing_key=cfg["signing_key"],
-        signature_alg=cfg["signature_alg"],
-        amount_ngn=packet_amount,
-        item_count=item_count,
-        session_uuid_v4=session.session_uuid,
-        connectivity=cfg.get("connectivity", "online"),
-        settlement={
-            "recipient_account": cfg.get("settlement_account", ""),
-            "recipient_bank_code": cfg.get("settlement_bank_code", ""),
-            "bank_name": cfg.get("settlement_bank_name", ""),
-            "recipient_account_name": cfg.get("settlement_account_name", ""),
-        }
-        if cfg.get("connectivity") == "offline"
-        else None,
-    )
-    ble_peripheral.publish_envelope(envelope)
 
-    session_id = envelope["payload"]["session_uuid_v4"]
-    session.payload_timestamp_ms = envelope["payload"]["timestamp_ms"]
+    if is_presence:
+        wire = ble_wire_compact.build_presence_wire(
+            cfg=cfg,
+            session_uuid_v4=session.session_uuid,
+        )
+    else:
+        wire = ble_wire_compact.build_checkout_wire(
+            cfg=cfg,
+            amount_kobo=packet_amount,
+            session_uuid_v4=session.session_uuid,
+        )
+
+    ble_peripheral.publish_envelope(wire)
+
+    session_id = wire["p"]["sid"]
+    session.payload_timestamp_ms = wire["p"]["ts"]
     _active_session = session_id
     _ble_ready = True
     log.info(
-        "BLE LIVE broadcast checkout_mode=%s connectivity=%s session=%s terminal=%s amount_ngn=%s ts=%s signature_alg=%s",
+        "BLE LIVE broadcast checkout_mode=%s connectivity=%s session=%s terminal=%s amount_kobo=%s ts=%s signature_alg=%s",
         mode,
         cfg.get("connectivity", "online"),
         session_id[:8],
         cfg["terminal_id"],
-        envelope["payload"]["transaction_details"]["total_amount_ngn"],
-        envelope["payload"]["timestamp_ms"],
-        envelope.get("signature_alg", cfg["signature_alg"]),
+        wire["p"].get("amt", 0),
+        wire["p"]["ts"],
+        wire.get("alg", cfg["signature_alg"]),
     )
     return {
         "ok": True,
@@ -150,6 +148,7 @@ def _broadcast_ble(
         "terminal_label": session_store.terminal_picker_label(cfg["terminal_id"]),
         "transport": "ble",
         "mode": mode,
+        "session_kind": "presence" if is_presence else "pos_checkout",
     }
 
 
