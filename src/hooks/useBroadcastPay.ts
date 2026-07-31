@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { broadcastBridge } from "@/shared/broadcast/bridge";
+import { notifyBroadcastPresenceNudge } from "@/shared/broadcast/checkout-api";
 import { validateCheckoutNowBroadcastCredentials } from "@/shared/broadcast/credentials";
 import { usePaymentProvider } from "@/context/PaymentProviderContext";
 import { roundMoney } from "@/shared/utils/money";
@@ -48,6 +49,18 @@ export function useBroadcastPay({ enabled, mode, amountNgn, itemCount }: UseBroa
   const sessionIdRef = useRef<string | null>(null);
 
   amountsRef.current = { amountNgn, itemCount, mode, sessionId: sessionIdRef.current };
+
+  const maybePresencePush = useCallback(async (m: BroadcastMode) => {
+    if (m !== "public" || summary.provider !== "checkoutnow") {
+      return;
+    }
+    const terminalId = credentials?.terminalId?.trim();
+    const apiKey = credentials?.apiKey?.trim();
+    if (!terminalId || !apiKey) {
+      return;
+    }
+    await notifyBroadcastPresenceNudge(terminalId, apiKey, "presence").catch(() => {});
+  }, [credentials?.apiKey, credentials?.terminalId, summary.provider]);
 
 
 
@@ -97,6 +110,7 @@ export function useBroadcastPay({ enabled, mode, amountNgn, itemCount }: UseBroa
 
       setStatus("broadcasting");
 
+      void maybePresencePush(m);
     } else {
 
       setError(result.error ?? "Broadcast failed to start");
@@ -105,7 +119,7 @@ export function useBroadcastPay({ enabled, mode, amountNgn, itemCount }: UseBroa
 
     }
 
-  }, [credentials, summary.provider]);
+  }, [credentials, summary.provider, maybePresencePush]);
 
 
 
@@ -191,13 +205,16 @@ export function useBroadcastPay({ enabled, mode, amountNgn, itemCount }: UseBroa
         itemCount: m === "public" ? 0 : items,
         sessionId: sid,
       });
+      if (m === "public") {
+        void maybePresencePush("public");
+      }
     };
 
     const id = window.setInterval(tick, SESSION_REFRESH_MS);
 
     return () => window.clearInterval(id);
 
-  }, [status, enabled]);
+  }, [status, enabled, maybePresencePush]);
 
 
 

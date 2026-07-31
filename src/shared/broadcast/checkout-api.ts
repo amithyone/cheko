@@ -200,3 +200,29 @@ export async function expectBroadcastPayment(
   const data = (await res.json()) as { ok?: boolean };
   return Boolean(data.ok);
 }
+
+/** Ask CheckoutPay to FCM-nudge CheckoutNow wallets (merchant name from terminal registry). */
+export async function notifyBroadcastPresenceNudge(
+  terminalId: string,
+  apiKey: string,
+  sessionKind: "presence" | "pos_checkout" = "presence",
+  apiBase?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const base = resolveBroadcastApiBase(apiBase);
+  const res = await fetch(`${base}/presence/nudge`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Terminal-Api-Key": apiKey,
+    },
+    body: JSON.stringify({ terminal_id: terminalId, session_kind: sessionKind }),
+    signal: AbortSignal.timeout(12000),
+  });
+
+  const data = (await res.json()) as { ok?: boolean; error?: string };
+  if (!res.ok || !data.ok) {
+    return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+  }
+
+  return { ok: true };
+}
