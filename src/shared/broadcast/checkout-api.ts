@@ -1,6 +1,8 @@
 import type { SessionStatus } from "./types";
+import type { PaymentProviderCredentials } from "@/types/payment-provider";
 
 const DEFAULT_BROADCAST_API = "https://check-outpay.com/api/v1/broadcast";
+const SIDECAR_BASE = import.meta.env.VITE_BROADCAST_SIDECAR_URL ?? "http://127.0.0.1:8765";
 
 /** Normalize any legacy bankApiUrl to the CheckoutPay broadcast API base. */
 export function resolveBroadcastApiBase(customBase?: string): string {
@@ -77,24 +79,103 @@ export async function pollBroadcastSession(
 export async function syncBroadcastSigningKey(
   terminalId: string,
   signingKey: string,
-  apiKey: string
+  apiKey: string,
+  apiBase?: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`${checkoutBroadcastApiBase()}/terminals/sync-signing-key`, {
+  const base = resolveBroadcastApiBase(apiBase);
+  const res = await fetch(`${base}/terminals/sync-signing-key`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Accept: "application/json",
       "X-Terminal-Api-Key": apiKey,
     },
     body: JSON.stringify({ terminal_id: terminalId, signing_key: signingKey }),
     signal: AbortSignal.timeout(10000),
   });
 
-  const data = (await res.json()) as { ok?: boolean; error?: string };
+  const text = await res.text();
+  let data: { ok?: boolean; error?: string; message?: string } = {};
+  try {
+    data = JSON.parse(text) as typeof data;
+  } catch {
+    if (text.trim().startsWith("<!")) {
+      return {
+        ok: false,
+        error: `HTTP ${res.status} — wrong URL (use ${base}/terminals/sync-signing-key)`,
+      };
+    }
+    return { ok: false, error: text.slice(0, 200) || `HTTP ${res.status}` };
+  }
+
   if (!res.ok || !data.ok) {
-    return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: false, error: data.error ?? data.message ?? `HTTP ${res.status}` };
   }
 
   return { ok: true };
+}
+
+/** Full Pay at Shop test: sync POS key + live verify (via sidecar when available). */
+export async function testCheckoutPayConnection(
+  creds: PaymentProviderCredentials
+): Promise<{ ok: boolean; message?: string }> {
+  const terminalId = creds.terminalId?.trim() ?? "";
+  const signingKey = creds.signingKey?.trim() ?? "";
+  const apiKey = creds.apiKey?.trim() ?? "";
+  const apiBase = resolveBroadcastApiBase(creds.checkoutBroadcastApi);
+
+  if (!terminalId || !signingKey || !apiKey) {
+    return { ok: false, message: "Terminal ID, signing key, and API key are required." };
+  }
+
+  try {
+    const res = await fetch(`${SIDECAR_BASE}/credentials/test-checkoutpay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        terminal_id: terminalId,
+        signing_key: signingKey,
+        api_key: apiKey,
+        checkout_broadcast_api: apiBase,
+      }),
+      signal: AbortSignal.timeout(25000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { ok?: boolean; message?: string };
+      if (data.message) {
+        return { ok: Boolean(data.ok), message: data.message };
+      }
+    }
+  } catch {
+    // Sidecar not running — sync + health below
+  }
+
+  const sync = await syncBroadcastSigningKey(terminalId, signingKey, apiKey, apiBase);
+  if (!sync.ok) {
+    return { ok: false, message: `Sync signing key failed: ${sync.error}` };
+  }
+
+  try {
+    const healthRes = await fetch(`${apiBase}/health`, { signal: AbortSignal.timeout(8000) });
+    const health = (await healthRes.json()) as { verify_profile?: string };
+    if (!health.verify_profile) {
+      return {
+        ok: false,
+        message: "Key synced but CheckoutPay is on old code. Deploy latest checkoutpay on production.",
+      };
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Key synced but could not reach CheckoutPay health.",
+    };
+  }
+
+  return {
+    ok: true,
+    message:
+      "Signing key synced to CheckoutPay. Start broadcast sidecar and test again for full live verify.",
+  };
 }
 
 export async function expectBroadcastPayment(

@@ -34,6 +34,8 @@ export interface PaymentProviderCredentials {
   settlementBankCode?: string;
   settlementAccountName?: string;
   merchantBankName?: string;
+  /** CheckoutPay broadcast API base, e.g. https://check-outpay.com/api/v1/broadcast */
+  checkoutBroadcastApi?: string;
   webhookSecret?: string;
   testMode?: boolean;
 }
@@ -80,6 +82,11 @@ export const PAYMENT_PROVIDERS: ProviderMeta[] = [
       { key: "terminalId", label: "Terminal ID", placeholder: "CP-1RK8Z" },
       { key: "merchantId", label: "Merchant ID (optional)" },
       { key: "signingKey", label: "Ed25519 signing key", secret: true },
+      {
+        key: "checkoutBroadcastApi",
+        label: "Verify API base URL",
+        placeholder: "https://check-outpay.com/api/v1/broadcast",
+      },
     ],
   },
   {

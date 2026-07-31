@@ -82,6 +82,11 @@ export function PaymentProviderPanel({ onSaved }: PaymentProviderPanelProps) {
       settlementBankCode: form.settlementBankCode,
       settlementAccountName: form.settlementAccountName,
       merchantBankName: form.merchantBankName,
+      checkoutBroadcastApi:
+        provider === "checkoutnow"
+          ? (form.checkoutBroadcastApi?.trim() ||
+            "https://check-outpay.com/api/v1/broadcast")
+          : form.checkoutBroadcastApi,
       signatureAlg:
         provider === "checkoutnow"
           ? (form.signatureAlg ?? "ed25519")
@@ -104,11 +109,53 @@ export function PaymentProviderPanel({ onSaved }: PaymentProviderPanelProps) {
   };
 
   const handleTest = async () => {
+    if (!unlocked) {
+      setTestResult({ ok: false, message: "Unlock credentials before testing." });
+      return;
+    }
     setTesting(true);
     setTestResult(null);
     try {
-      const result = await adapter.verifyCredentials();
+      const creds: PaymentProviderCredentials = {
+        provider,
+        testMode: form.testMode ?? true,
+        apiKey: form.apiKey,
+        secretKey: form.secretKey,
+        publicKey: form.publicKey,
+        terminalId: form.terminalId,
+        merchantId: form.merchantId,
+        contractCode: form.contractCode,
+        signingKey: form.signingKey,
+        broadcastConnectivity:
+          provider === "checkoutnow"
+            ? (form.broadcastConnectivity ?? "online")
+            : form.broadcastConnectivity,
+        settlementAccountNumber: form.settlementAccountNumber,
+        settlementBankCode: form.settlementBankCode,
+        settlementAccountName: form.settlementAccountName,
+        merchantBankName: form.merchantBankName,
+        checkoutBroadcastApi:
+          form.checkoutBroadcastApi?.trim() ||
+          "https://check-outpay.com/api/v1/broadcast",
+        signatureAlg:
+          provider === "checkoutnow" ? "ed25519" : form.signatureAlg,
+        webhookSecret: form.webhookSecret,
+      };
+      if (provider === "checkoutnow") {
+        const { validateCheckoutNowBroadcastCredentials } = await import(
+          "@/shared/broadcast/credentials"
+        );
+        const check = validateCheckoutNowBroadcastCredentials(creds);
+        if (!check.ok) {
+          setTestResult({ ok: false, message: check.errors[0] ?? "Invalid credentials" });
+          return;
+        }
+      }
+      await saveCredentials(creds);
+      const { testCheckoutPayConnection } = await import("@/shared/broadcast/checkout-api");
+      const result = await testCheckoutPayConnection(creds);
       setTestResult(result);
+      await refresh();
     } catch (e) {
       setTestResult({ ok: false, message: e instanceof Error ? e.message : "Test failed" });
     } finally {

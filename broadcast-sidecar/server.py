@@ -496,17 +496,21 @@ def credentials_test_checkoutpay():
 
     import packet_signing
 
+    override = request.get_json(silent=True) or {}
     cfg = _config()
-    terminal_id = cfg["terminal_id"]
-    signing_key = cfg["signing_key"]
-    api_key = (cfg.get("api_key") or _env("CHEKO_TERMINAL_API_KEY", "")).strip()
 
+    terminal_id = (override.get("terminal_id") or cfg["terminal_id"] or "").strip()
+    signing_key = (override.get("signing_key") or cfg["signing_key"] or "").strip()
+    api_key = (override.get("api_key") or cfg.get("api_key") or _env("CHEKO_TERMINAL_API_KEY", "")).strip()
+    if override.get("checkout_broadcast_api"):
+        base = str(override["checkout_broadcast_api"]).strip().rstrip("/").replace("/verify-broadcast", "")
+    else:
+        base = _checkout_broadcast_api_base(cfg)
     if not terminal_id or not signing_key:
         return jsonify({"ok": False, "message": "Terminal ID and Ed25519 signing key required"}), 200
     if not api_key:
         return jsonify({"ok": False, "message": "Terminal API key (bk_…) required in Settings"}), 200
 
-    base = _checkout_broadcast_api_base(cfg)
     verify_url = f"{base}/verify-broadcast"
     sync_url = f"{base}/terminals/sync-signing-key"
 

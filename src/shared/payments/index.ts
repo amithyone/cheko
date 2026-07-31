@@ -10,6 +10,7 @@ import {
   checkoutBroadcastApiBase,
   expectBroadcastPayment,
   pollBroadcastSession,
+  testCheckoutPayConnection,
 } from "@/shared/broadcast/checkout-api";
 import { roundMoney } from "@/shared/utils/money";
 
@@ -115,55 +116,10 @@ export function createCheckoutNowAdapter(creds: PaymentProviderCredentials | nul
       if (!broadcast.ok) {
         return { ok: false, message: broadcast.errors.join(" ") };
       }
-
-      const sidecarBase =
-        import.meta.env.VITE_BROADCAST_SIDECAR_URL ?? "http://127.0.0.1:8765";
-      try {
-        const res = await fetch(`${sidecarBase}/credentials/test-checkoutpay`, {
-          method: "POST",
-          headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(20000),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as { ok?: boolean; message?: string };
-          if (data.message) {
-            return { ok: Boolean(data.ok), message: data.message };
-          }
-        }
-      } catch {
-        // Sidecar not running — fall through to health-only check
+      if (!creds) {
+        return { ok: false, message: "No credentials saved" };
       }
-
-      try {
-        const healthRes = await fetch(`${checkoutBroadcastApiBase()}/health`, {
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!healthRes.ok) {
-          return {
-            ok: false,
-            message: `CheckoutPay unreachable (HTTP ${healthRes.status}). Start broadcast sidecar for full test.`,
-          };
-        }
-        const health = (await healthRes.json()) as { verify_profile?: string };
-        if (!health.verify_profile) {
-          return {
-            ok: false,
-            message:
-              "CheckoutPay is on old code (missing verify_profile). Deploy latest checkoutpay on production.",
-          };
-        }
-      } catch (e) {
-        return {
-          ok: false,
-          message: e instanceof Error ? e.message : "Could not reach CheckoutPay",
-        };
-      }
-
-      return {
-        ok: true,
-        message:
-          "CheckoutPay health OK. Start broadcast sidecar and test again for full Ed25519 + live verify.",
-      };
+      return testCheckoutPayConnection(creds);
     },
     async verifyTransfer(_ref, amount, opts) {
       const sessionId = opts?.broadcastSessionId?.trim();
