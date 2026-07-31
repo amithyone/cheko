@@ -381,6 +381,9 @@ def verify_broadcast():
     cfg = _config()
     try:
         import packet_signing
+        import ble_wire_expand
+
+        body = ble_wire_expand.normalize_ble_read_for_verify(body)
 
         payload = body.get("payload")
         if not isinstance(payload, dict):

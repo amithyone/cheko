@@ -27,15 +27,14 @@ _active: BroadcastSession | None = None
 
 
 def terminal_picker_label(terminal_id: str) -> str:
-    """TERM-01 … TERM-20 → 01–20 for multi-POS picker display."""
+    """TERM-01 … TERM-20 → 01–20; CP-* CheckoutPay terminals → full ID."""
     upper = terminal_id.upper()
+    if upper.startswith("CP-"):
+        return terminal_id
     if upper.startswith("TERM-"):
         suffix = terminal_id.split("-", 1)[-1]
         if suffix.isdigit():
-            return suffix.zfill(2)
-    digits = "".join(ch for ch in terminal_id if ch.isdigit())
-    if digits:
-        return digits[-2:].zfill(2)
+            return suffix.zfill(2)[-2:]
     return terminal_id[:8]
 
 
