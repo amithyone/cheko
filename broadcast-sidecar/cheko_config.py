@@ -103,6 +103,18 @@ def build_broadcast_config() -> dict[str, str]:
         store_key="bankApiUrl",
         default="http://127.0.0.1:8765/mock-bank/verify",
     )
+    api_key, api_src = resolve_credential(
+        store=store,
+        env_key="CHEKO_TERMINAL_API_KEY",
+        store_key="apiKey",
+        default="",
+    )
+    checkout_broadcast_api, cba_src = resolve_credential(
+        store=store,
+        env_key="CHEKO_CHECKOUT_BROADCAST_API",
+        store_key="checkoutBroadcastApi",
+        default="https://check-outpay.com/api/v1/broadcast",
+    )
 
     if not signing_key and not terminal_id.upper().startswith("CP-"):
         signing_key = "demo-signing-key-min-16-chars"
@@ -127,6 +139,8 @@ def build_broadcast_config() -> dict[str, str]:
         "settlement_bank_name": settlement_bank_name,
         "settlement_account_name": settlement_account_name,
         "bank_api_url": bank_api_url,
+        "api_key": api_key,
+        "checkout_broadcast_api": checkout_broadcast_api,
         "config_path": str(config_path()),
         "credential_source": f"alg={sig_src} connectivity={conn_src}",
         "using_sdk_defaults": str(using_sdk_defaults).lower(),

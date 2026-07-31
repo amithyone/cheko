@@ -470,6 +470,138 @@ def verify_broadcast():
         return jsonify({"valid": False, "error": str(exc)}), 200
 
 
+def _checkout_broadcast_api_base(cfg: dict[str, str]) -> str:
+    """CheckoutPay broadcast API base — never use bare check-outpay.com/verify-broadcast."""
+    explicit = (cfg.get("checkout_broadcast_api") or "").strip().rstrip("/")
+    if explicit:
+        return explicit.replace("/verify-broadcast", "").rstrip("/")
+
+    bank = (cfg.get("bank_api_url") or "").strip().rstrip("/")
+    if "/api/v1/broadcast" in bank:
+        return bank.split("/verify-broadcast")[0].rstrip("/")
+    if "check-outpay.com" in bank.lower():
+        return "https://check-outpay.com/api/v1/broadcast"
+
+    return "https://check-outpay.com/api/v1/broadcast"
+
+
+@app.post("/credentials/test-checkoutpay")
+def credentials_test_checkoutpay():
+    """Settings → Test connection: local Ed25519 sign + sync key + live CheckoutPay verify."""
+    import json as json_mod
+    import time
+    import urllib.error
+    import urllib.request
+    import uuid
+
+    import packet_signing
+
+    cfg = _config()
+    terminal_id = cfg["terminal_id"]
+    signing_key = cfg["signing_key"]
+    api_key = (cfg.get("api_key") or _env("CHEKO_TERMINAL_API_KEY", "")).strip()
+
+    if not terminal_id or not signing_key:
+        return jsonify({"ok": False, "message": "Terminal ID and Ed25519 signing key required"}), 200
+    if not api_key:
+        return jsonify({"ok": False, "message": "Terminal API key (bk_…) required in Settings"}), 200
+
+    base = _checkout_broadcast_api_base(cfg)
+    verify_url = f"{base}/verify-broadcast"
+    sync_url = f"{base}/terminals/sync-signing-key"
+
+    payload = {
+        "protocol_version": 2.1,
+        "connectivity": cfg.get("connectivity", "online"),
+        "timestamp_ms": int(time.time() * 1000),
+        "session_uuid_v4": str(uuid.uuid4()),
+        "terminal_id": terminal_id,
+        "transaction_details": {"currency_code": "NGN", "total_amount_ngn": 100_000, "item_count": 1},
+    }
+
+    try:
+        signature = packet_signing.sign_ed25519(payload, signing_key)
+    except Exception as exc:
+        return jsonify({"ok": False, "message": f"Local Ed25519 sign failed: {exc}"}), 200
+
+    envelope = {"payload": payload, "signature_alg": "ed25519", "signature": signature}
+    ok_local, local_err = packet_signing.verify_signed_envelope(envelope, signing_key)
+    if not ok_local:
+        return jsonify({"ok": False, "message": f"Local Ed25519 verify failed: {local_err}"}), 200
+
+    sync_req = urllib.request.Request(
+        sync_url,
+        data=json_mod.dumps({"terminal_id": terminal_id, "signing_key": signing_key}).encode(),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-Terminal-Api-Key": api_key,
+        },
+    )
+    try:
+        with urllib.request.urlopen(sync_req, timeout=15) as resp:
+            sync_data = json_mod.loads(resp.read().decode())
+            if not sync_data.get("ok"):
+                err = sync_data.get("error") or sync_data.get("message") or resp.status
+                return jsonify({"ok": False, "message": f"sync-signing-key failed: {err}"}), 200
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")[:500]
+        if body.lstrip().startswith("<!"):
+            return jsonify(
+                {
+                    "ok": False,
+                    "message": f"sync-signing-key HTTP {exc.code} — wrong URL (expected {sync_url})",
+                }
+            ), 200
+        return jsonify({"ok": False, "message": f"sync-signing-key HTTP {exc.code}: {body[:200]}"}), 200
+    except Exception as exc:
+        return jsonify({"ok": False, "message": f"sync-signing-key failed: {exc}"}), 200
+
+    verify_req = urllib.request.Request(
+        verify_url,
+        data=json_mod.dumps(envelope).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(verify_req, timeout=15) as resp:
+            data = json_mod.loads(resp.read().decode())
+            if data.get("valid"):
+                merchant = data.get("merchant_name") or terminal_id
+                return jsonify(
+                    {
+                        "ok": True,
+                        "message": f"Local Ed25519 signature OK · CheckoutPay verify OK ({merchant})",
+                        "verify_url": verify_url,
+                    }
+                ), 200
+            err = data.get("error") or "unknown"
+            return jsonify(
+                {
+                    "ok": False,
+                    "message": f"Local Ed25519 signature OK · CheckoutPay verify failed: {err}",
+                    "verify_url": verify_url,
+                }
+            ), 200
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")[:800]
+        if body.lstrip().startswith("<!"):
+            return jsonify(
+                {
+                    "ok": False,
+                    "message": (
+                        f"Local Ed25519 signature OK · CheckoutPay verify failed: HTTP {exc.code} at {verify_url} "
+                        "(404 — use https://check-outpay.com/api/v1/broadcast/verify-broadcast)"
+                    ),
+                    "verify_url": verify_url,
+                }
+            ), 200
+        return jsonify({"ok": False, "message": f"CheckoutPay verify HTTP {exc.code}: {body[:200]}"}), 200
+    except Exception as exc:
+        return jsonify({"ok": False, "message": f"CheckoutPay verify failed: {exc}"}), 200
+
+
 @app.post("/mock-bank/verify")
 def mock_bank_verify():
     body = request.get_json(silent=True) or {}

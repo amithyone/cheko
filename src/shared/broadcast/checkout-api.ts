@@ -2,8 +2,30 @@ import type { SessionStatus } from "./types";
 
 const DEFAULT_BROADCAST_API = "https://check-outpay.com/api/v1/broadcast";
 
+/** Normalize any legacy bankApiUrl to the CheckoutPay broadcast API base. */
+export function resolveBroadcastApiBase(customBase?: string): string {
+  const raw = (customBase ?? import.meta.env.VITE_CHECKOUT_BROADCAST_API ?? DEFAULT_BROADCAST_API)
+    .trim()
+    .replace(/\/+$/, "");
+
+  if (raw.endsWith("/verify-broadcast")) {
+    return raw.slice(0, -"/verify-broadcast".length);
+  }
+  if (raw.includes("/api/v1/broadcast")) {
+    return raw.split("/verify-broadcast")[0]!.replace(/\/+$/, "");
+  }
+  if (/check-outpay\.com/i.test(raw)) {
+    return DEFAULT_BROADCAST_API;
+  }
+  return raw || DEFAULT_BROADCAST_API;
+}
+
 export function checkoutBroadcastApiBase(): string {
-  return import.meta.env.VITE_CHECKOUT_BROADCAST_API ?? DEFAULT_BROADCAST_API;
+  return resolveBroadcastApiBase();
+}
+
+export function broadcastVerifyUrl(customBase?: string): string {
+  return `${resolveBroadcastApiBase(customBase)}/verify-broadcast`;
 }
 
 export interface BroadcastSessionPollResult {

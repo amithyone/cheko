@@ -82,6 +82,10 @@ function sidecarEnv(): NodeJS.ProcessEnv {
       creds?.settlementAccountName ?? process.env.CHEKO_SETTLEMENT_ACCOUNT_NAME ?? "",
     CHEKO_BANK_API_URL:
       process.env.CHEKO_BANK_API_URL ?? `${EXTERNAL_URL}`,
+    CHEKO_TERMINAL_API_KEY: creds?.apiKey ?? process.env.CHEKO_TERMINAL_API_KEY ?? "",
+    CHEKO_CHECKOUT_BROADCAST_API:
+      process.env.CHEKO_CHECKOUT_BROADCAST_API ??
+      "https://check-outpay.com/api/v1/broadcast",
     CHEKO_BROADCAST_TRANSPORT: process.env.CHEKO_BROADCAST_TRANSPORT ?? "ble",
     CHEKO_MERCHANT_BANK:
       creds?.merchantBankName ?? process.env.CHEKO_MERCHANT_BANK ?? "",
